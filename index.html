@@ -566,12 +566,14 @@
     var s=langByCode(srcCode), t=langByCode(tgtCode);
     var body={
       model:model,
-      temperature:0.2,
       messages:[
         { role:"system", content:"You are a professional interpreter for live conversation. Translate the user's message from "+s.en+" to "+t.en+". Output ONLY the translation itself: no explanations, no quotation marks, no notes. Preserve names, numbers, and the speaker's tone. If the input is already in "+t.en+", output it unchanged." },
         { role:"user", content:text }
       ]
     };
+    /* gpt-6-luna は temperature パラメータを受け付けず HTTP 400（Unsupported value: 'temperature'）になるため送らない。
+       gpt-4o-mini など従来モデルへのフォールバック時は従来どおり temperature: 0.2 を送る。 */
+    if(model!=="gpt-6-luna") body.temperature=0.2;
     return oaiCall(OPENAI_BASE+"/chat/completions", { method:"POST", headers:oaiHeaders(true), body:JSON.stringify(body) }, 30000, "json", "translate("+model+")")
       .then(function(data){
         var choice=data && data.choices && data.choices[0];
