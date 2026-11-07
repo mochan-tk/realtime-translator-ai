@@ -1,0 +1,1386 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>リアルタイム翻訳AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Noto+Sans+SC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f5f3ee; --surface:#ffffff; --surface2:#faf8f3;
+    --ink:#191d1a; --ink2:#4c564f; --ink3:#87918a;
+    --line:#ddd7c9; --line2:#c6bfa9;
+    --teal:#0b6e5d; --teal-ink:#ffffff; --teal-soft:#dff0ea;
+    --ai:#c2410c; --ai-soft:#fdeee3;
+    --red:#cf222e; --red-soft:#fdecea;
+    --amber:#8a5a00; --amber-soft:#fdf3d3;
+    --green:#127a4e;
+    --shadow:0 1px 2px rgba(25,29,26,.06),0 10px 26px rgba(25,29,26,.06);
+    --radius:14px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#101311; --surface:#1a1f1c; --surface2:#212723;
+      --ink:#edf1ee; --ink2:#b7c2ba; --ink3:#7e8b83;
+      --line:#2d352f; --line2:#3d4741;
+      --teal:#31bfa9; --teal-ink:#052720; --teal-soft:#17332c;
+      --ai:#ff9a5c; --ai-soft:#38220f;
+      --red:#ff6f61; --red-soft:#3a1e1b;
+      --amber:#eec25e; --amber-soft:#33290f;
+      --green:#43cf92;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 26px rgba(0,0,0,.25);
+    }
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Noto Sans JP","Noto Sans SC",system-ui,-apple-system,"Hiragino Sans",sans-serif;line-height:1.55}
+  .wrap{max-width:1080px;margin:0 auto;padding:14px 14px 44px}
+  .mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+  h1{font-size:21px;font-weight:900;margin:2px 0 2px;letter-spacing:.01em}
+  .lead{font-size:13.5px;color:var(--ink2);margin:0 0 12px}
+  .lead b{color:var(--ai)}
+
+  .strip{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+  .pill{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;
+    padding:6px 11px;border:1px solid var(--line);border-radius:999px;background:var(--surface)}
+  .pill.ai{border-color:var(--ai);background:var(--ai-soft);color:var(--ai)}
+  .pill.warn{border-color:var(--amber);background:var(--amber-soft);color:var(--amber)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--ink3);flex:none}
+  .dot.on{background:var(--red);animation:pulse 1.1s infinite}
+  .dot.ready{background:var(--green)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .strip .sp{flex:1}
+
+  section.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;margin-top:12px}
+  section.card h2{margin:0 0 8px;font-size:13px;letter-spacing:.05em;color:var(--ink2)}
+  section.card.ai-card{border-top:4px solid var(--ai)}
+
+  /* setup */
+  .setup-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media (max-width:640px){.setup-grid{grid-template-columns:1fr}}
+  .fld label{display:block;font-size:11.5px;font-weight:700;letter-spacing:.05em;color:var(--ink2);margin-bottom:5px}
+  input[type=text],input[type=password],input[type=url]{
+    width:100%;font:inherit;font-size:15px;color:var(--ink);
+    background:var(--surface2);border:1px solid var(--line2);border-radius:10px;padding:11px 12px;min-height:48px}
+  .setup-note{font-size:12.5px;color:var(--ink2);margin-top:10px}
+  .setup-note b{color:var(--ink)}
+  .key-state{font-size:12.5px;font-weight:700;margin-top:8px;min-height:18px}
+  .key-state.ok{color:var(--green)}
+  .key-state.ng{color:var(--red)}
+
+  /* language bar */
+  .langrow{display:grid;grid-template-columns:1fr 44px 1fr;gap:10px;align-items:end}
+  select{width:100%;appearance:none;-webkit-appearance:none;font:inherit;font-size:16px;font-weight:700;color:var(--ink);
+    background:var(--surface2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 12px center;
+    border:1px solid var(--line2);border-radius:10px;padding:11px 34px 11px 12px;min-height:48px}
+  select.small{font-size:14px;min-height:44px}
+  select:focus-visible,button:focus-visible,textarea:focus-visible,input:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+  .swap{width:44px;height:48px;border-radius:10px;border:1px solid var(--line2);background:var(--teal-soft);color:var(--teal);font-size:19px;cursor:pointer;display:grid;place-items:center}
+  .swap:active{transform:scale(.94)}
+  .presets{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+  .chip{font:inherit;font-size:13px;font-weight:700;cursor:pointer;border:1px solid var(--line);background:var(--surface2);color:var(--ink2);padding:7px 12px;border-radius:999px;min-height:36px}
+  .chip.active{background:var(--teal);border-color:var(--teal);color:var(--teal-ink)}
+  .presets .hint{font-size:12px;color:var(--ink3);align-self:center}
+
+  /* stage */
+  .stage{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+  @media (max-width:720px){.stage{grid-template-columns:1fr}}
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;min-height:168px;display:flex;flex-direction:column}
+  .panel.target{border-top:4px solid var(--teal)}
+  .panel.source{border-top:4px solid var(--line2)}
+  .panel h2{margin:0 0 4px;font-size:12px;letter-spacing:.08em;color:var(--ink2);display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .tag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--surface2);border:1px solid var(--line);color:var(--ink3)}
+  .tag.live{background:var(--amber-soft);color:var(--amber);border-color:transparent}
+  .tag.ai{background:var(--ai-soft);color:var(--ai);border-color:transparent}
+  .live-text{font-size:clamp(19px,2.6vw,25px);font-weight:700;line-height:1.5;word-break:break-word;flex:1}
+  .live-text .interim{color:var(--ink3);font-weight:500}
+  .live-text .placeholder{color:var(--ink3);font-weight:500;font-size:17px}
+  .live-sub{margin-top:8px;font-size:12.5px;color:var(--ink3);min-height:18px}
+
+  /* deck */
+  .deck-top{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+  .micbtn{width:80px;height:80px;border-radius:50%;border:none;cursor:pointer;flex:none;background:var(--teal);color:var(--teal-ink);display:grid;place-items:center;box-shadow:0 6px 18px rgba(11,110,93,.35);transition:transform .12s}
+  .micbtn svg{width:34px;height:34px}
+  .micbtn:active{transform:scale(.95)}
+  .micbtn.listening{background:var(--red);animation:breathe 1.6s infinite}
+  @keyframes breathe{0%,100%{box-shadow:0 0 0 5px var(--red-soft)}50%{box-shadow:0 0 0 13px var(--red-soft)}}
+  .micbtn.busy{background:var(--amber);color:#fff}
+  .micbtn:disabled{opacity:.45;cursor:not-allowed;animation:none}
+  .deck-mid{flex:1;min-width:200px}
+  .deck-mid .state{font-size:17px;font-weight:900}
+  .deck-mid .sub{font-size:13px;color:var(--ink2);margin-top:2px}
+  #wave{width:100%;height:38px;display:block;margin-top:8px}
+  .deck-btns{display:flex;flex-wrap:wrap;gap:8px}
+  .btn{font:inherit;font-size:13.5px;font-weight:700;cursor:pointer;min-height:42px;border-radius:10px;padding:9px 14px;border:1px solid var(--line2);background:var(--surface2);color:var(--ink)}
+  .btn.primary{background:var(--teal);border-color:var(--teal);color:var(--teal-ink)}
+  .btn.ai{background:var(--ai);border-color:var(--ai);color:#fff}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .toggles{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin-top:14px;padding-top:14px;border-top:1px dashed var(--line)}
+  .toggle{display:flex;gap:10px;align-items:flex-start;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;text-align:left;font:inherit;width:100%}
+  .toggle .sw{width:42px;height:24px;border-radius:999px;background:var(--line2);flex:none;position:relative;margin-top:2px;transition:background .15s}
+  .toggle .sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:left .15s}
+  .toggle[aria-pressed="true"] .sw{background:var(--teal)}
+  .toggle[aria-pressed="true"] .sw::after{left:21px}
+  .toggle b{display:block;font-size:14px}
+  .toggle span.d{display:block;font-size:12px;color:var(--ink2);margin-top:1px}
+  .slider-row{display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .slider-row label{font-size:13px;font-weight:700;white-space:nowrap}
+  .slider-row input[type=range]{flex:1;accent-color:var(--teal)}
+  .slider-row .val{font-size:12.5px;color:var(--ink2);min-width:38px;text-align:right}
+
+  .banner{display:none;margin-top:12px;border-radius:var(--radius);padding:13px 15px;font-size:14px;border:1px solid;background:var(--surface)}
+  .banner.show{display:block}
+  .banner.err{background:var(--red-soft);border-color:var(--red)}
+  .banner.info{background:var(--amber-soft);border-color:var(--amber)}
+  .banner b{font-weight:900}
+  .banner ul{margin:6px 0 0;padding-left:18px}
+
+  /* manual */
+  .manual-row{display:flex;gap:8px;flex-wrap:wrap}
+  .manual-row textarea{flex:1;min-width:220px;font:inherit;font-size:16px;color:var(--ink);background:var(--surface2);border:1px solid var(--line2);border-radius:10px;padding:11px 12px;min-height:52px;resize:vertical}
+
+  /* history */
+  .hist-head{display:flex;align-items:baseline;gap:10px;margin:22px 2px 10px;flex-wrap:wrap}
+  .hist-head h2{margin:0;font-size:16px;font-weight:900}
+  .hist-head .count{font-size:12.5px;color:var(--ink3)}
+  .hist-head .sp{flex:1}
+  .hist-head button{all:unset;cursor:pointer;font-size:13px;font-weight:700;color:var(--teal);text-decoration:underline;text-underline-offset:3px}
+  .empty{border:1.5px dashed var(--line2);border-radius:var(--radius);padding:26px 18px;text-align:center;color:var(--ink2);font-size:14px;background:var(--surface2)}
+  .entry{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;margin-bottom:10px}
+  .entry .meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:11.5px;color:var(--ink3);margin-bottom:7px}
+  .entry .meta .dir{font-weight:700;color:var(--ink2);background:var(--surface2);border:1px solid var(--line);padding:2px 8px;border-radius:999px}
+  .entry .meta .engine{font-weight:700;color:var(--ai)}
+  .entry .orig{font-size:15.5px;color:var(--ink2);line-height:1.5;word-break:break-word}
+  .entry .tran{font-size:19px;font-weight:700;line-height:1.5;margin-top:4px;word-break:break-word}
+  .entry .tran.pending{color:var(--ink3);font-weight:500;font-size:16px}
+  .entry .tran.failed{color:var(--red);font-weight:500;font-size:15px}
+  .entry .acts{display:flex;gap:7px;margin-top:10px;flex-wrap:wrap}
+  .mini{font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;border:1px solid var(--line);background:var(--surface2);color:var(--ink2);border-radius:8px;padding:6px 11px;min-height:34px}
+  .mini:active{transform:scale(.96)}
+
+  /* diagnostics */
+  .diag-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .diag-head h2{margin:0}
+  .diag-head .sp{flex:1}
+  .diag-env{font-size:11px;color:var(--ink3);word-break:break-all;flex-basis:100%}
+  .diag-log{margin-top:8px;max-height:200px;overflow-y:auto;font-size:11.5px;line-height:1.65;background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;white-space:pre-wrap;word-break:break-word}
+  .diag-log .e{color:var(--red);font-weight:700}
+  .diag-log .ok{color:var(--green);font-weight:700}
+  .diag-log .ai{color:var(--ai);font-weight:700}
+
+  /* guide */
+  .guide ol{margin:0;padding-left:20px;font-size:14px}
+  .guide li{margin:7px 0}
+  .guide p{font-size:13px;color:var(--ink2);margin:8px 0 0}
+  .guide code{font-family:"IBM Plex Mono",monospace;font-size:12.5px;background:var(--surface2);border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+
+  .toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,80px);z-index:50;background:var(--ink);color:var(--bg);font-size:14px;font-weight:700;padding:11px 18px;border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,.3);transition:transform .25s;max-width:92vw;text-align:center;pointer-events:none}
+  .toast.show{transform:translate(-50%,0)}
+  @media (prefers-reduced-motion: reduce){.dot.on,.micbtn.listening{animation:none}.toast{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>リアルタイム翻訳AI</h1>
+  <p class="lead">録音した声を <b>AIで文字起こし（gpt-transcribe）→ GPT で翻訳 → AI音声で読み上げ</b> する通訳アプリです。あなたのOpenAI APIキーを下の設定に入れると、ブラウザから直接OpenAI APIを呼ぶAI経路で動きます。キー未設定の間は、ブラウザ認識＋無料翻訳の経路で動きます。</p>
+
+  <div class="strip" role="status">
+    <span class="pill"><span class="dot" id="statusDot"></span><span id="statusText">待機中</span></span>
+    <span class="pill" id="aiPill">AI経路：キー未設定（無料経路で動作）</span>
+    <span class="pill" id="sttPill">音声認識：確認中…</span>
+    <span class="pill" id="ttsPill">読み上げ：確認中…</span>
+    <span class="sp"></span>
+    <span class="pill mono" id="latencyPill">処理 — ms</span>
+  </div>
+
+  <section class="card ai-card" aria-label="OpenAI APIキーの設定">
+    <h2>OpenAI APIキーの設定（BYOK：キーはあなたのもの）</h2>
+    <div class="fld">
+      <label for="apiKey">あなたのOpenAI APIキー</label>
+      <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off" spellcheck="false">
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      <button class="btn ai" id="keySave" type="button">キーを保存してAI経路を使う</button>
+      <button class="btn" id="keyTest" type="button">接続テスト</button>
+      <button class="btn" id="keyDelete" type="button">キーを削除</button>
+    </div>
+    <label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:13px;color:var(--ink2);cursor:pointer">
+      <input type="checkbox" id="keyPersist" checked style="width:18px;height:18px;margin-top:2px;flex:none;accent-color:var(--ai)">
+      <span>キーをこの端末に保存する（永続保存）。チェックを外すと、キーはこのページを開いている間だけメモリに保持され、保存されません。</span>
+    </label>
+    <button class="toggle" id="tglExtFallback" type="button" aria-pressed="false" style="margin-top:10px">
+      <span class="sw" aria-hidden="true"></span>
+      <span><b>外部フォールバックを許可</b><span class="d">ONのときだけ、OpenAI翻訳に失敗したら無料翻訳（Google／MyMemory）へ自動で切り替えます。OFF（初期状態）ではOpenAIの失敗はエラーとして止まります。外部サービスに本文が送られる点に注意してください。</span></span>
+    </button>
+    <div class="key-state" id="keyState"></div>
+    <div class="setup-grid" style="margin-top:12px">
+      <div class="fld">
+        <label for="ttsModel">読み上げ音声モデル（OpenAI）</label>
+        <select class="small" id="ttsModel">
+          <option value="gpt-4o-mini-tts">gpt-4o-mini-tts（自然な音声）</option>
+          <option value="tts-1">tts-1（高速・低遅延）</option>
+        </select>
+      </div>
+      <div class="fld">
+        <label for="ttsMode">読み上げ方式</label>
+        <select class="small" id="ttsMode">
+          <option value="auto">OpenAI音声を優先（失敗時は端末の音声合成）</option>
+          <option value="device">端末の音声合成のみ</option>
+        </select>
+      </div>
+    </div>
+    <p class="setup-note">
+      音声合成モデル（<span class="mono">gpt-4o-mini-tts</span> / <span class="mono">tts-1</span>）は <b>2027-01-06 で提供終了予定</b>です。終了後は「読み上げ方式」を端末の音声合成に切り替えるのが代替になります。
+    </p>
+    <p class="setup-note">
+      キーは<b>この端末のブラウザ内（localStorage）にだけ</b>保存され、このページのソースやリポジトリには<b>一切含まれません</b>。アプリはブラウザから直接 <span class="mono">api.openai.com</span> を呼びます（中継サーバーは使いません）。
+      ただし <b>localStorage は同一オリジン（同じドメイン）で動く他のページからも読み取れる仕様</b>です。共有端末では使わず、使い終わったら「キーを削除」で消してください。APIの利用料金はあなたのOpenAIアカウント（APIクレジット等）から引かれます。
+    </p>
+  </section>
+
+  <section class="card" aria-label="言語の選択" style="margin-top:12px">
+    <div class="langrow">
+      <div class="fld">
+        <label for="srcLang">話す言語（聞き取り）</label>
+        <select id="srcLang"></select>
+      </div>
+      <button class="swap" id="swapBtn" type="button" aria-label="言語を入れ替える" title="言語を入れ替える">⇄</button>
+      <div class="fld">
+        <label for="tgtLang">翻訳先（読み上げ）</label>
+        <select id="tgtLang"></select>
+      </div>
+    </div>
+    <div class="presets" id="presets">
+      <button class="chip" type="button" data-src="ja" data-tgt="zh-CN">日本語 → 中国語</button>
+      <button class="chip" type="button" data-src="zh-CN" data-tgt="ja">中国語 → 日本語</button>
+      <button class="chip" type="button" data-src="ja" data-tgt="en">日本語 → 英語</button>
+      <button class="chip" type="button" data-src="en" data-tgt="ja">英語 → 日本語</button>
+      <button class="chip" type="button" data-src="ja" data-tgt="ko">日本語 → 韓国語</button>
+      <span class="hint">深圳では「日→中」と双方向モードが便利です</span>
+    </div>
+  </section>
+
+  <div class="banner info" id="supportBanner" role="alert"></div>
+  <div class="banner err" id="errorBanner" role="alert"></div>
+
+  <section class="stage" aria-label="ライブ表示" style="margin-top:0">
+    <div class="panel source">
+      <h2><span id="srcPanelTitle">原文</span><span class="tag" id="srcTag">待機</span></h2>
+      <div class="live-text" id="srcLive"><span class="placeholder">マイクボタンを押して話し、もう一度押すと翻訳します。</span></div>
+      <div class="live-sub" id="srcSub"></div>
+    </div>
+    <div class="panel target">
+      <h2><span id="tgtPanelTitle">訳文</span><span class="tag" id="tgtTag">待機</span></h2>
+      <div class="live-text" id="tgtLive"><span class="placeholder">翻訳結果がここに出ます。確定した文は自動で読み上げます。</span></div>
+      <div class="live-sub" id="tgtSub"></div>
+    </div>
+  </section>
+
+  <section class="card" aria-label="操作">
+    <div class="deck-top">
+      <button class="micbtn" id="micBtn" type="button" aria-label="録音を開始">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="2.5" width="6" height="11" rx="3" fill="currentColor"/><path d="M5 11.5a7 7 0 0 0 14 0M12 18.5V21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <div class="deck-mid">
+        <div class="state" id="deckState">タップして録音スタート</div>
+        <div class="sub" id="deckSub">AI経路では「押して話す → もう一度押して送信」が基本です。一文ごとに区切ると速く正確です。</div>
+        <canvas id="wave" width="600" height="76" aria-hidden="true"></canvas>
+      </div>
+      <div class="deck-btns">
+        <button class="btn" id="stopSpeakBtn" type="button">読み上げを止める</button>
+        <button class="btn" id="retestBtn" type="button">音声テスト</button>
+      </div>
+    </div>
+    <div class="toggles">
+      <button class="toggle" id="tglSpeak" type="button" aria-pressed="true">
+        <span class="sw" aria-hidden="true"></span>
+        <span><b>自動読み上げ</b><span class="d">翻訳が確定したらすぐ音声で出力します（方式は上の設定に従います）</span></span>
+      </button>
+      <button class="toggle" id="tglConvo" type="button" aria-pressed="false">
+        <span class="sw" aria-hidden="true"></span>
+        <span><b>双方向モード（会話）</b><span class="d">一文終わるごとに言語を自動で入れ替え、相手の返事も訳します</span></span>
+      </button>
+      <div class="slider-row">
+        <label for="rate">読み上げ速度</label>
+        <input type="range" id="rate" min="0.7" max="1.5" step="0.1" value="1">
+        <span class="val mono" id="rateVal">1.0×</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" aria-label="テキスト入力">
+    <h2>キーボード入力でも翻訳できます</h2>
+    <div class="manual-row">
+      <textarea id="manualText" rows="2" placeholder="ここに文を入力…（例：このホテルまでタクシーでいくらですか？）"></textarea>
+      <button class="btn primary" id="manualBtn" type="button">翻訳して読み上げる</button>
+    </div>
+  </section>
+
+  <div class="hist-head">
+    <h2>会話ログ</h2>
+    <span class="count" id="histCount">まだ何もありません</span>
+    <span class="sp"></span>
+    <button type="button" id="clearBtn">ログを消す</button>
+  </div>
+  <div id="histList">
+    <div class="empty" id="histEmpty">話した内容と翻訳が、ここに時系列で残ります。各文はボタンで再読み上げ・コピーができます。</div>
+  </div>
+
+  <section class="card" aria-label="診断情報">
+    <div class="diag-head">
+      <h2>診断ログ（エラー切り分け用）</h2>
+      <span class="sp"></span>
+      <button class="mini" id="diagCopy" type="button">ログをコピー</button>
+      <button class="mini" id="diagClear" type="button">ログを消す</button>
+      <span class="diag-env mono" id="diagEnv"></span>
+    </div>
+    <div class="diag-log mono" id="diagLog" aria-live="polite"></div>
+  </section>
+
+  <section class="card guide" aria-label="セットアップ手順">
+    <h2>セットアップ手順（3ステップ）＆ GitHub Pagesへの置き方</h2>
+    <ol>
+      <li><b>ChatGPT設定で組織をリンク</b>：ChatGPT の Settings → Billing で「組織をリンクする」を押し、<b>個人用のAPI組織</b>を選ぶ（月$200分のAPIクレジットがその組織で使えるようになります。リンク先の組織選びは原則やり直しが利かないので慎重に）。</li>
+      <li><b>platform.openai.com でAPIキーを作成</b>：その組織の API keys ページで、このアプリ専用のキーを新規作成する。</li>
+      <li><b>このアプリに貼る</b>：上の「OpenAI APIキーの設定」にキーを貼って「キーを保存してAI経路を使う」を押し、「接続テスト」で疎通を確認する。キーはこの端末のブラウザ内にだけ保存されます。</li>
+    </ol>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      <button class="btn primary" id="downloadHtml" type="button">このページを単体HTMLで保存（Pages用）</button>
+    </div>
+    <p>単体HTMLにAPIキーは含まれません（キーは端末のlocalStorageに保存されるため）。Pages版でも、使う端末ごとにキーを設定してください。</p>
+  </section>
+
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  var LANGS = [
+    { code:"ja",    name:"日本語",        en:"Japanese",              recog:"ja-JP", tts:"ja-JP", g:"ja",    oai:"ja" },
+    { code:"zh-CN", name:"中国語（簡体字）", en:"Simplified Chinese",   recog:"zh-CN", tts:"zh-CN", g:"zh-CN", oai:"zh" },
+    { code:"zh-TW", name:"中国語（繁体字）", en:"Traditional Chinese",  recog:"zh-TW", tts:"zh-TW", g:"zh-TW", oai:"zh" },
+    { code:"en",    name:"英語",          en:"English",               recog:"en-US", tts:"en-US", g:"en",    oai:"en" },
+    { code:"ko",    name:"韓国語",        en:"Korean",                recog:"ko-KR", tts:"ko-KR", g:"ko",    oai:"ko" },
+    { code:"th",    name:"タイ語",        en:"Thai",                  recog:"th-TH", tts:"th-TH", g:"th",    oai:"th" },
+    { code:"vi",    name:"ベトナム語",    en:"Vietnamese",            recog:"vi-VN", tts:"vi-VN", g:"vi",    oai:"vi" },
+    { code:"es",    name:"スペイン語",    en:"Spanish",               recog:"es-ES", tts:"es-ES", g:"es",    oai:"es" },
+    { code:"fr",    name:"フランス語",    en:"French",                recog:"fr-FR", tts:"fr-FR", g:"fr",    oai:"fr" },
+    { code:"de",    name:"ドイツ語",      en:"German",                recog:"de-DE", tts:"de-DE", g:"de",    oai:"de" },
+    { code:"pt",    name:"ポルトガル語",  en:"Portuguese",            recog:"pt-BR", tts:"pt-BR", g:"pt",    oai:"pt" },
+    { code:"id",    name:"インドネシア語", en:"Indonesian",            recog:"id-ID", tts:"id-ID", g:"id",    oai:"id" }
+  ];
+  function langByCode(c){ for (var i=0;i<LANGS.length;i++) if (LANGS[i].code===c) return LANGS[i]; return LANGS[0]; }
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ var d=document.createElement("div"); d.textContent=s; return d.innerHTML; }
+  function errMsg(e){ if(!e) return "不明なエラー"; return (e.name?e.name+" ":"")+(e.message||String(e)); }
+
+  var srcSel=$("srcLang"), tgtSel=$("tgtLang");
+  var micBtn=$("micBtn"), deckState=$("deckState"), deckSub=$("deckSub");
+  var statusDot=$("statusDot"), statusText=$("statusText");
+  var srcLive=$("srcLive"), tgtLive=$("tgtLive"), srcSub=$("srcSub"), tgtSub=$("tgtSub");
+  var srcTag=$("srcTag"), tgtTag=$("tgtTag");
+  var histList=$("histList"), histCount=$("histCount"), toastEl=$("toast"), wave=$("wave");
+
+  LANGS.forEach(function(l){
+    var o1=document.createElement("option"); o1.value=l.code; o1.textContent=l.name; srcSel.appendChild(o1);
+    var o2=document.createElement("option"); o2.value=l.code; o2.textContent=l.name; tgtSel.appendChild(o2);
+  });
+  srcSel.value="ja"; tgtSel.value="zh-CN";
+
+  /* ---------- state ---------- */
+  var OPENAI_BASE="https://api.openai.com/v1";
+  /* モデルIDはここに集約する（主系→フォールバックの順） */
+  var MODELS={
+    transcribe:["gpt-transcribe","gpt-4o-mini-transcribe","whisper-1"],
+    translate:["gpt-6-luna","gpt-4o-mini"]
+  };
+  var TTS_MAX_CHARS=4096; /* OpenAI Speech API の入力上限 */
+  var LS_KEY="rtai.openaiApiKey";
+  var apiKey="", aiOn=false;
+  try{ apiKey=window.localStorage.getItem(LS_KEY)||""; }catch(e){ apiKey=""; }
+  aiOn=!!apiKey;
+  var autoSpeak=true, convoMode=false, extFallback=false;
+  var mode="idle"; /* idle | recording | processing | browser-listening */
+  var phase=null; /* null | transcribing | translating | tts | playing （マイク状態とは別に表示する処理フェーズ） */
+  var entrySeq=0;
+  /* 録音セッション管理：セッションごとに stream / recorder / chunks を保持する */
+  var recSession=null, recStarting=false, recSessionSeq=0, recordTimer=null;
+  var audioCtx=null, analyser=null, waveRAF=null;
+  var recog=null, shouldListen=false;
+  var recogSessionSeq=0, recogSeen=null, finalQueue=[], finalQueueBusy=false;
+  var currentAudio=null, currentAudioUrl=null;
+  /* 読み上げ：発話IDと世代カウンタで順序と停止の無効化を管理し、直列キューで再生する */
+  var speechSeq=0, speechGen=0, speechQueue=[], speechBusy=false, speechCurrentResolve=null, activePlaybackFinish=null;
+
+  function toast(msg){
+    toastEl.textContent=msg; toastEl.classList.add("show");
+    clearTimeout(toast._t); toast._t=setTimeout(function(){ toastEl.classList.remove("show"); },2600);
+  }
+  function showError(html){
+    var b=$("errorBanner");
+    if(!html){ b.className="banner err"; b.innerHTML=""; return; }
+    b.innerHTML=html; b.className="banner err show";
+  }
+  function copyText(t){
+    if(!t){ toast("コピーするテキストがありません"); return; }
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(t).then(function(){ toast("コピーしました"); }, function(){ toast("コピーできませんでした"); });
+    } else { toast("このブラウザではコピーできません"); }
+  }
+
+  /* ---------- diagnostics ---------- */
+  var diagLogEl=$("diagLog");
+  var inIframe=(function(){ try{ return window.self!==window.top; }catch(e){ return true; } })();
+  var secureCtx=("isSecureContext" in window)? !!window.isSecureContext : (location.protocol==="https:");
+  var hasRecorder=("MediaRecorder" in window) && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  var SR=window.SpeechRecognition || window.webkitSpeechRecognition || null;
+  var hasTTS=("speechSynthesis" in window);
+  function diagStamp(){ var d=new Date(); function p(x){ return String(x).padStart(2,"0"); } return p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds()); }
+  function logDiag(kind, msg){
+    var line=document.createElement("div");
+    if(kind) line.className=kind;
+    line.textContent=diagStamp()+" "+msg;
+    diagLogEl.appendChild(line);
+    while(diagLogEl.children.length>90) diagLogEl.removeChild(diagLogEl.firstChild);
+    diagLogEl.scrollTop=diagLogEl.scrollHeight;
+  }
+  $("diagEnv").textContent="埋め込み表示: "+(inIframe?"はい":"いいえ")+" / 安全な接続(HTTPS等): "+(secureCtx?"はい":"いいえ")+" / UA: "+navigator.userAgent;
+  $("diagClear").addEventListener("click", function(){ diagLogEl.innerHTML=""; logDiag("", "ログを消去しました"); });
+  $("diagCopy").addEventListener("click", function(){ copyText(diagLogEl.textContent||""); });
+  logDiag("", "環境チェック: 録音(MediaRecorder)="+(( "MediaRecorder" in window)?"あり":"なし")+" / getUserMedia="+((navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)?"あり":"なし")+" / ブラウザ音声認識="+(SR?"あり":"なし")+" / 読み上げAPI="+(hasTTS?"あり":"なし")+" / 埋め込み表示="+(inIframe?"はい":"いいえ")+" / 安全な接続="+(secureCtx?"はい":"いいえ"));
+  if(aiOn){
+    logDiag("ai", "保存済みのOpenAI APIキーを読み込みました（localStorage）。AI経路（Whisper＋GPT＋AI音声）で動きます。キーの値はログに出しません。");
+  } else {
+    logDiag("ai", "OpenAI APIキーは未設定で開始しました。キーを設定するとAI経路に切り替わります。未設定の間はブラウザ認識＋無料翻訳（フォールバック）で動きます。");
+  }
+  if(!hasRecorder && !SR){
+    var sb=$("supportBanner"); sb.className="banner info show";
+    sb.innerHTML="<b>この画面ではマイク入力が使えません。</b><ul><li>録音API（MediaRecorder）もブラウザ音声認識も見つかりませんでした。アプリ内表示（埋め込み）では塞がれることがあります。</li><li>Chrome／Safariでこのページを直接開くと使える場合があります。下の「キーボード入力」なら翻訳＋読み上げが使えます。</li></ul>";
+  }
+  $("sttPill").textContent = hasRecorder ? "録音：利用可（AI経路の土台OK）" : (SR ? "音声認識：ブラウザ経路のみ" : "音声認識：この画面では不可");
+  statusDot.className="dot ready"; statusText.textContent="準備OK";
+  if(hasTTS && speechSynthesis.getVoices){ speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged=function(){ speechSynthesis.getVoices(); }; }
+
+  /* ---------- fetch helper ----------
+     タイムアウトは「本文の受信完了まで」を含めて管理する。
+     タイマーは json/blob/text の読み取りが終わるまで解除せず、finally で必ず解除する。 */
+  function fetchParsed(url, opts, ms, kind){
+    var ctrl=("AbortController" in window)? new AbortController():null;
+    var timer=setTimeout(function(){ if(ctrl) ctrl.abort(); }, ms||20000);
+    var o={}; if(opts) for(var k in opts) o[k]=opts[k];
+    if(ctrl) o.signal=ctrl.signal;
+    var p;
+    try{ p=fetch(url, o); }catch(e){ p=Promise.reject(e); }
+    return p.then(function(r){
+      if(kind==="blob") return r.blob();
+      if(kind==="text") return r.text();
+      return r.json();
+    }).then(function(v){ clearTimeout(timer); return v; }, function(e){
+      clearTimeout(timer);
+      if(e && e.name==="AbortError") throw new Error("タイムアウトしました（"+(ms||20000)+"ms以内に応答・本文受信が完了しませんでした）");
+      throw e;
+    });
+  }
+  /* OpenAI用：HTTPステータスの確認と本文（json/blob）の読み取りまでを同じタイムアウトで管理する */
+  function oaiCall(url, opts, ms, kind, what){
+    var ctrl=("AbortController" in window)? new AbortController():null;
+    var timer=setTimeout(function(){ if(ctrl) ctrl.abort(); }, ms||20000);
+    var o={}; if(opts) for(var k in opts) o[k]=opts[k];
+    if(ctrl) o.signal=ctrl.signal;
+    var p;
+    try{ p=fetch(url, o); }catch(e){ p=Promise.reject(e); }
+    return p.then(function(r){
+      if(!r.ok){
+        return r.text().then(function(t){ throw makeApiError(what, r.status, t); });
+      }
+      if(kind==="blob") return r.blob();
+      return r.json();
+    }).then(function(v){ clearTimeout(timer); return v; }, function(e){
+      clearTimeout(timer);
+      if(e && e.name==="AbortError") throw new Error("タイムアウトしました（"+(ms||20000)+"ms以内に応答・本文受信が完了しませんでした）");
+      throw e;
+    });
+  }
+  function oaiHeaders(json, key){
+    var h={ "Authorization":"Bearer "+(key!=null?key:apiKey) };
+    if(json) h["Content-Type"]="application/json";
+    return h;
+  }
+  /* 認証・クォータ系エラーではモデル切替の再試行をしない判定 */
+  function isFatalApiError(e){
+    if(!e) return false;
+    if(e.status===401 || e.status===403) return true;
+    var m=(e.message||"")+" "+(e.code||"");
+    return /insufficient_quota|quota|billing/i.test(m);
+  }
+  function makeApiError(what, status, bodyText){
+    var msg="", code="";
+    try{ var j=JSON.parse(bodyText); if(j && j.error){ if(j.error.message) msg=j.error.message; if(j.error.code) code=j.error.code; else if(j.error.type) code=j.error.type; } }catch(e){}
+    var err=new Error(what+" http "+status+(msg?": "+msg:""));
+    err.status=status; err.code=code;
+    return err;
+  }
+
+  /* ---------- OpenAI direct path (BYOK) ---------- */
+  function oaiTranscribeOnce(blob, srcCode, model){
+    var fd=new FormData();
+    var ext=(blob.type.indexOf("mp4")>=0)?"mp4":(blob.type.indexOf("ogg")>=0)?"ogg":"webm";
+    fd.append("file", blob, "utterance."+ext);
+    fd.append("model", model);
+    fd.append("language", langByCode(srcCode).oai);
+    return oaiCall(OPENAI_BASE+"/audio/transcriptions", { method:"POST", headers:oaiHeaders(false), body:fd }, 45000, "json", "transcribe("+model+")")
+      .then(function(data){
+        var text=(data && data.text || "").trim();
+        if(!text) throw new Error("transcribe empty（文字起こし結果が空でした）");
+        return { text:text, model:model };
+      });
+  }
+  /* 主系 gpt-transcribe → gpt-4o-mini-transcribe → whisper-1。
+     ただし 401/403/クォータ系ではモデルを替えても直らないので再試行しない。 */
+  function oaiTranscribe(blob, srcCode){
+    var models=MODELS.transcribe.slice();
+    function attempt(i){
+      return oaiTranscribeOnce(blob, srcCode, models[i]).catch(function(e){
+        if(isFatalApiError(e)){
+          logDiag("e", "文字起こし失敗（"+models[i]+"）: "+errMsg(e)+" — 認証/クォータ系のためモデル切替はしません");
+          throw e;
+        }
+        if(i+1<models.length){
+          logDiag("e", "文字起こし失敗（"+models[i]+"）: "+errMsg(e)+" — "+models[i+1]+" で再試行します");
+          return attempt(i+1);
+        }
+        throw e;
+      });
+    }
+    return attempt(0);
+  }
+  function oaiTranslateOnce(text, srcCode, tgtCode, model){
+    var s=langByCode(srcCode), t=langByCode(tgtCode);
+    var body={
+      model:model,
+      temperature:0.2,
+      messages:[
+        { role:"system", content:"You are a professional interpreter for live conversation. Translate the user's message from "+s.en+" to "+t.en+". Output ONLY the translation itself: no explanations, no quotation marks, no notes. Preserve names, numbers, and the speaker's tone. If the input is already in "+t.en+", output it unchanged." },
+        { role:"user", content:text }
+      ]
+    };
+    return oaiCall(OPENAI_BASE+"/chat/completions", { method:"POST", headers:oaiHeaders(true), body:JSON.stringify(body) }, 30000, "json", "translate("+model+")")
+      .then(function(data){
+        var choice=data && data.choices && data.choices[0];
+        if(!choice) throw new Error("translate empty（応答に choices がありませんでした）");
+        var msg=choice.message||{};
+        if(msg.refusal) throw new Error("translate refused（モデルが翻訳を拒否しました: "+msg.refusal+"）");
+        var out=(msg.content||"").trim();
+        if(!out) throw new Error("translate empty（訳文が空でした）");
+        var truncated=!!(choice.finish_reason && choice.finish_reason!=="stop");
+        if(truncated) logDiag("e", "翻訳が finish_reason="+choice.finish_reason+" で打ち切られました（途中までの結果として表示します）");
+        return { text:out, truncated:truncated, finishReason:choice.finish_reason||"stop", model:model };
+      });
+  }
+  /* 主系 gpt-6-luna → gpt-4o-mini。認証/クォータ系ではモデル切替をしない。 */
+  function oaiTranslate(text, srcCode, tgtCode){
+    var models=MODELS.translate.slice();
+    function attempt(i){
+      return oaiTranslateOnce(text, srcCode, tgtCode, models[i]).catch(function(e){
+        if(isFatalApiError(e)){
+          logDiag("e", "AI翻訳失敗（"+models[i]+"）: "+errMsg(e)+" — 認証/クォータ系のためモデル切替はしません");
+          throw e;
+        }
+        if(i+1<models.length){
+          logDiag("e", "AI翻訳失敗（"+models[i]+"）: "+errMsg(e)+" — "+models[i+1]+" で再試行します");
+          return attempt(i+1);
+        }
+        throw e;
+      });
+    }
+    return attempt(0);
+  }
+  /* AI音声の生成＋再生。play() の失敗も含め、失敗は呼び出し側へ伝播させる（端末音声フォールバックを効かせるため）。
+     再生が終わるまで解決しない。 */
+  function oaiSpeakOnce(text){
+    var body={
+      model:$("ttsModel").value,
+      voice:"alloy",
+      input:text,
+      response_format:"mp3",
+      speed:Math.min(4, Math.max(0.25, parseFloat($("rate").value)||1))
+    };
+    setPhase("tts");
+    return oaiCall(OPENAI_BASE+"/audio/speech", { method:"POST", headers:oaiHeaders(true), body:JSON.stringify(body) }, 30000, "blob", "speech")
+      .then(function(blob){
+        return new Promise(function(resolve, reject){
+          stopAudioEl();
+          var url=URL.createObjectURL(blob);
+          var audio=new Audio(url);
+          currentAudio=audio; currentAudioUrl=url;
+          var done=false;
+          function finish(err){
+            if(done) return; done=true;
+            if(activePlaybackFinish===finish) activePlaybackFinish=null;
+            if(currentAudio===audio) stopAudioEl(); else { try{ URL.revokeObjectURL(url); }catch(e){} }
+            if(err) reject(err); else resolve();
+          }
+          activePlaybackFinish=finish;
+          audio.onended=function(){ finish(null); };
+          audio.onerror=function(){ finish(new Error("AI音声の再生でエラーが起きました")); };
+          setPhase("playing");
+          var p;
+          try{ p=audio.play(); }catch(e){ finish(e); return; }
+          if(p && p.catch) p.catch(function(e){ finish(new Error("AI音声の再生開始に失敗: "+errMsg(e))); });
+          logDiag("ai", "AI音声で読み上げます（"+$("ttsModel").value+"）");
+        });
+      });
+  }
+
+  /* ---------- fallback translation (free) ---------- */
+  function translateGoogle(text, sl, tl){
+    var url="https://translate.googleapis.com/translate_a/single?client=gtx&sl="+encodeURIComponent(sl)+"&tl="+encodeURIComponent(tl)+"&dt=t&q="+encodeURIComponent(text);
+    return oaiCall(url, null, 9000, "json", "google-translate").then(function(data){
+      if(!data || !data[0]) throw new Error("empty");
+      var out=""; data[0].forEach(function(seg){ if(seg && seg[0]) out+=seg[0]; });
+      out=out.trim(); if(!out) throw new Error("empty");
+      return out;
+    });
+  }
+  function translateMyMemory(text, sl, tl){
+    var url="https://api.mymemory.translated.net/get?q="+encodeURIComponent(text)+"&langpair="+encodeURIComponent(sl+"|"+tl);
+    return oaiCall(url, null, 9000, "json", "mymemory-translate").then(function(data){
+      var out=data && data.responseData && data.responseData.translatedText;
+      if(!out || /MYMEMORY WARNING|NO QUERY|INVALID/i.test(out)) throw new Error("mm empty");
+      return out.trim();
+    });
+  }
+  function freeTranslate(text, srcCode, tgtCode){
+    var s=langByCode(srcCode), t=langByCode(tgtCode);
+    var gErr=null;
+    return translateGoogle(text, s.g, t.g).catch(function(e){
+      gErr=e;
+      logDiag("e", "無料翻訳API失敗（Google）: "+errMsg(e)+" — 代替APIで再試行します");
+      return translateMyMemory(text, s.g, t.g);
+    }).then(function(out){ return out; }, function(e){
+      throw new Error("Google: "+errMsg(gErr)+" / MyMemory: "+errMsg(e));
+    });
+  }
+  function translateAny(text, srcCode, tgtCode){
+    if(srcCode===tgtCode) return Promise.resolve({ text:text, engine:"same-lang", truncated:false });
+    if(aiOn){
+      return oaiTranslate(text, srcCode, tgtCode)
+        .then(function(res){ return { text:res.text, engine:"gpt", truncated:res.truncated, model:res.model }; })
+        .catch(function(e){
+          if(!extFallback){
+            /* 外部フォールバックは明示オプトイン。OFFならOpenAIの失敗はエラーで止める */
+            logDiag("e", "AI翻訳（OpenAI）に失敗: "+errMsg(e)+" — 外部フォールバックはOFFのため、ここで止めます");
+            throw e;
+          }
+          logDiag("e", "AI翻訳（OpenAI）に失敗: "+errMsg(e)+" — 外部フォールバックONのため無料翻訳に切り替えます");
+          return freeTranslate(text, srcCode, tgtCode).then(function(out){ return { text:out, engine:"free-fallback", truncated:false }; });
+        });
+    }
+    return freeTranslate(text, srcCode, tgtCode).then(function(out){ return { text:out, engine:"free", truncated:false }; });
+  }
+
+  /* ---------- TTS ---------- */
+  function stopAudioEl(){
+    if(currentAudio){ try{ currentAudio.pause(); }catch(e){} currentAudio=null; }
+    if(currentAudioUrl){ try{ URL.revokeObjectURL(currentAudioUrl); }catch(e){} currentAudioUrl=null; }
+  }
+  function pickVoice(langCode){
+    if(!hasTTS) return null;
+    var want=langByCode(langCode).tts.toLowerCase();
+    var voices=speechSynthesis.getVoices()||[];
+    var i,v;
+    for(i=0;i<voices.length;i++){ v=voices[i]; if(v.lang && v.lang.toLowerCase()===want) return v; }
+    for(i=0;i<voices.length;i++){ v=voices[i]; if(v.lang && v.lang.toLowerCase().indexOf(want.split("-")[0])===0) return v; }
+    return null;
+  }
+  /* 端末音声：発話が終わる（または失敗する）まで解決しないPromiseを返す */
+  function speakDeviceOnce(text, langCode){
+    return new Promise(function(resolve, reject){
+      if(!hasTTS || !text){ reject(new Error("端末の音声合成が使えません")); return; }
+      try{
+        var u=new SpeechSynthesisUtterance(text);
+        u.lang=langByCode(langCode).tts;
+        var v=pickVoice(langCode); if(v) u.voice=v;
+        u.rate=parseFloat($("rate").value)||1;
+        var done=false;
+        u.onend=function(){ if(!done){ done=true; resolve(); } };
+        u.onerror=function(ev){
+          if(done) return; done=true;
+          var code=(ev&&ev.error)||"unknown";
+          if(code==="canceled"||code==="interrupted"){ resolve(); return; }
+          reject(new Error("読み上げエラー: "+code));
+        };
+        setPhase("playing");
+        speechSynthesis.speak(u);
+      }catch(e){ reject(e); }
+    });
+  }
+  /* 4096文字上限に合わせ、文境界で分割する */
+  function splitForSpeech(text, maxLen){
+    maxLen=maxLen||TTS_MAX_CHARS;
+    if(text.length<=maxLen) return [text];
+    var parts=[], rest=text;
+    var breakRe=/[。．.!?！？…\n]/;
+    while(rest.length>maxLen){
+      var window=rest.slice(0, maxLen);
+      var cut=-1;
+      for(var i=window.length-1;i>=Math.floor(maxLen*0.4);i--){ if(breakRe.test(window.charAt(i))){ cut=i+1; break; } }
+      if(cut<0) cut=maxLen;
+      parts.push(rest.slice(0, cut));
+      rest=rest.slice(cut);
+    }
+    if(rest) parts.push(rest);
+    return parts;
+  }
+  /* 読み上げキュー：発話IDと世代カウンタを持ち、直列に再生する。
+     返り値のPromiseは、その発話が（分割分も含め）終わる・失敗する・停止で無効化されると解決する。 */
+  function speak(text, langCode){
+    if(!text) return Promise.resolve();
+    var gen=speechGen;
+    var id=++speechSeq;
+    var chunks=splitForSpeech(text);
+    if(chunks.length>1) logDiag("ai", "読み上げ文が長いため "+chunks.length+" 分割して順番に再生します（上限 "+TTS_MAX_CHARS+" 文字）");
+    return new Promise(function(resolve){
+      speechQueue.push({ id:id, gen:gen, chunks:chunks, lang:langCode, resolve:resolve });
+      runSpeechQueue();
+    });
+  }
+  function runSpeechQueue(){
+    if(speechBusy) return;
+    var item=speechQueue.shift();
+    if(!item) return;
+    if(item.gen!==speechGen){ item.resolve(); runSpeechQueue(); return; }
+    speechBusy=true;
+    speechCurrentResolve=item.resolve;
+    var chain=Promise.resolve();
+    item.chunks.forEach(function(chunk){
+      chain=chain.then(function(){
+        if(item.gen!==speechGen) throw new Error("__stopped__");
+        if(aiOn && $("ttsMode").value==="auto"){
+          return oaiSpeakOnce(chunk).catch(function(e){
+            if(item.gen!==speechGen) throw new Error("__stopped__");
+            /* play() の失敗もここに伝播してくる。その場合に端末音声へフォールバックする */
+            logDiag("e", "AI音声（OpenAI）に失敗: "+errMsg(e)+" — 端末の音声合成にフォールバックします");
+            return speakDeviceOnce(chunk, item.lang);
+          });
+        }
+        return speakDeviceOnce(chunk, item.lang);
+      });
+    });
+    function finish(){
+      speechBusy=false;
+      if(speechCurrentResolve===item.resolve) speechCurrentResolve=null;
+      if(phase==="playing"||phase==="tts") setPhase(null);
+      item.resolve();
+      runSpeechQueue();
+    }
+    chain.then(finish, function(e){
+      if(!(e && e.message==="__stopped__")) logDiag("e", "読み上げに失敗: "+errMsg(e));
+      finish();
+    });
+  }
+  function stopSpeak(){
+    speechGen++; /* 世代を進めて、キュー内・再生中の発話をすべて無効化する */
+    var pending=speechQueue; speechQueue=[];
+    pending.forEach(function(it){ it.resolve(); });
+    if(activePlaybackFinish){ var f=activePlaybackFinish; activePlaybackFinish=null; f(new Error("__stopped__")); }
+    stopAudioEl();
+    if(hasTTS){ try{ speechSynthesis.cancel(); }catch(e){} }
+    if(speechCurrentResolve){ var r=speechCurrentResolve; speechCurrentResolve=null; r(); }
+    if(phase==="playing"||phase==="tts") setPhase(null);
+  }
+  $("stopSpeakBtn").addEventListener("click", function(){ stopSpeak(); toast("読み上げを止めました"); });
+  $("retestBtn").addEventListener("click", function(){
+    var samples={ "ja":"テストです。翻訳音声が聞こえますか？", "zh-CN":"你好，这是语音测试。", "zh-TW":"你好，這是語音測試。", "en":"Hello, this is a voice test.", "ko":"안녕하세요, 음성 테스트입니다." };
+    speak(samples[tgtSel.value]||"Hello, this is a voice test.", tgtSel.value);
+    toast(langByCode(tgtSel.value).name+" でテスト音声を再生します");
+  });
+  $("rate").addEventListener("input", function(){ $("rateVal").textContent=(parseFloat(this.value)).toFixed(1)+"×"; });
+  function refreshTtsPill(){
+    if(aiOn && $("ttsMode").value==="auto"){
+      $("ttsPill").textContent="読み上げ：OpenAI音声（"+$("ttsModel").value+"）優先";
+    } else {
+      $("ttsPill").textContent= hasTTS ? "読み上げ：端末の音声合成" : "読み上げ：このブラウザ非対応";
+    }
+  }
+  $("ttsModel").addEventListener("change", refreshTtsPill);
+  $("ttsMode").addEventListener("change", refreshTtsPill);
+
+  /* ---------- language UI ---------- */
+  function refreshLangUI(){
+    $("srcPanelTitle").textContent="原文 ・ "+langByCode(srcSel.value).name;
+    $("tgtPanelTitle").textContent="訳文 ・ "+langByCode(tgtSel.value).name;
+    document.querySelectorAll("#presets .chip").forEach(function(c){
+      c.classList.toggle("active", c.getAttribute("data-src")===srcSel.value && c.getAttribute("data-tgt")===tgtSel.value);
+    });
+  }
+  function swapLangs(){
+    var a=srcSel.value; srcSel.value=tgtSel.value; tgtSel.value=a;
+    refreshLangUI();
+    srcLive.innerHTML='<span class="placeholder">'+esc(langByCode(srcSel.value).name)+'で話してください。</span>';
+    tgtLive.innerHTML='<span class="placeholder">'+esc(langByCode(tgtSel.value).name)+'に翻訳します。</span>';
+    srcTag.textContent="待機"; srcTag.className="tag"; tgtTag.textContent="待機"; tgtTag.className="tag";
+  }
+  $("swapBtn").addEventListener("click", swapLangs);
+  srcSel.addEventListener("change", refreshLangUI);
+  tgtSel.addEventListener("change", refreshLangUI);
+  document.querySelectorAll("#presets .chip").forEach(function(c){
+    c.addEventListener("click", function(){
+      srcSel.value=c.getAttribute("data-src"); tgtSel.value=c.getAttribute("data-tgt");
+      refreshLangUI(); toast(langByCode(srcSel.value).name+" → "+langByCode(tgtSel.value).name+" に設定しました");
+    });
+  });
+  function bindToggle(id, initial, fn){
+    var el=$(id);
+    el.setAttribute("aria-pressed", initial?"true":"false");
+    el.addEventListener("click", function(){
+      var on=el.getAttribute("aria-pressed")!=="true";
+      el.setAttribute("aria-pressed", on?"true":"false"); fn(on);
+    });
+  }
+  bindToggle("tglSpeak", true, function(on){ autoSpeak=on; if(!on) stopSpeak(); });
+  bindToggle("tglConvo", false, function(on){ convoMode=on; toast(on?"双方向モード ON：一文ごとに言語が入れ替わります":"双方向モード OFF"); });
+
+  /* ---------- API key settings (BYOK) ---------- */
+  function maskKey(k){ return k.length>10 ? k.slice(0,3)+"…"+k.slice(-4) : "（短いキー）"; }
+  function setKeyUI(stateMsg, isErr){
+    var pill=$("aiPill");
+    if(aiOn){
+      pill.textContent="AI経路：OpenAI APIキー設定済み（直接接続）";
+      pill.className="pill ai";
+    } else {
+      pill.textContent="AI経路：キー未設定（無料経路で動作）";
+      pill.className="pill";
+    }
+    var ks=$("keyState");
+    if(stateMsg){ ks.textContent=stateMsg; ks.className="key-state "+(isErr?"ng":"ok"); }
+    else if(aiOn){ ks.textContent="保存済みのキー: "+maskKey(apiKey)+"（この端末のlocalStorageに保存）"; ks.className="key-state ok"; }
+    else { ks.textContent="キーは未設定です。無料経路（ブラウザ認識＋無料翻訳）で動作しています。"; ks.className="key-state"; }
+    refreshTtsPill();
+    updateDeckText();
+  }
+  if(aiOn) $("apiKey").value=apiKey;
+  bindToggle("tglExtFallback", false, function(on){
+    extFallback=on;
+    logDiag("", "外部フォールバック（Google/MyMemory）を "+(on?"ON（OpenAI失敗時に外部へ送って翻訳します）":"OFF（OpenAI失敗時はエラーで止まります）")+" にしました");
+  });
+  $("keySave").addEventListener("click", function(){
+    var k=$("apiKey").value.trim();
+    if(!k){ toast("APIキーを入力してください"); return; }
+    if(k.indexOf("sk-")!==0){
+      showError("<b>キーの形式が違うようです。</b>OpenAIのAPIキーは通常 <span class=\"mono\">sk-</span> で始まります。platform.openai.com で発行したキーを貼ってください。");
+      return;
+    }
+    showError("");
+    var persist=$("keyPersist").checked;
+    if(persist){
+      try{
+        window.localStorage.setItem(LS_KEY, k);
+      }catch(e){
+        logDiag("e", "localStorageへの保存に失敗: "+errMsg(e));
+        showError("<b>キーを保存できませんでした。</b>ブラウザのプライベートモード等では保存できないことがあります。詳細は診断ログに出ています。");
+        return;
+      }
+    } else {
+      /* 永続保存しない場合は、以前保存されていたキーが残らないよう消しておく（失敗したら正直に出す） */
+      try{ window.localStorage.removeItem(LS_KEY); }catch(e){
+        logDiag("e", "保存済みキーの消去に失敗: "+errMsg(e));
+        showError("<b>以前に保存されていたキーを消せませんでした。</b>このセッションでは新しいキーを使いますが、端末内に古いキーが残っている可能性があります。詳細は診断ログに出ています。");
+      }
+    }
+    apiKey=k; aiOn=true;
+    logDiag("ai", "APIキーを設定しました（"+maskKey(k)+" / "+(persist?"localStorageに永続保存":"メモリのみ・保存なし")+"）。AI経路（文字起こし＋GPT翻訳＋AI音声）に切り替わります。");
+    setKeyUI(persist?"キーを保存しました。AI経路で動きます。":"キーを設定しました（このページを開いている間だけ有効・保存していません）。AI経路で動きます。", false);
+    toast("AI経路（OpenAI直接接続）で動きます");
+  });
+  $("keyDelete").addEventListener("click", function(){
+    var failed=false, failErr=null;
+    try{ window.localStorage.removeItem(LS_KEY); }catch(e){ failed=true; failErr=e; }
+    if(failed){
+      /* 削除の失敗は握り潰さず、正直に表示する */
+      logDiag("e", "APIキーの削除に失敗しました: "+errMsg(failErr));
+      setKeyUI("キーの削除に失敗しました："+errMsg(failErr)+"（端末内にキーが残っている可能性があります）", true);
+      showError("<b>キーを削除できませんでした。</b> 詳細：<span class=\"mono\">"+esc(errMsg(failErr))+"</span><ul><li>ブラウザの保存領域に問題が起きている可能性があります。このセッションのメモリ上のキーは消去しますが、端末内に保存済みキーが残っている可能性があるため、次回開いたときに読み込まれるかもしれません。</li></ul>");
+    } else {
+      logDiag("", "APIキーを削除しました。無料経路（ブラウザ認識＋無料翻訳）に戻ります");
+      setKeyUI("キーを削除しました。無料経路で動作しています。", false);
+      toast("キーを削除し、無料経路に戻しました");
+    }
+    apiKey=""; aiOn=false;
+    $("apiKey").value="";
+    refreshTtsPill(); updateDeckText();
+  });
+  $("keyTest").addEventListener("click", function(){
+    var k=$("apiKey").value.trim()||apiKey;
+    if(!k){ toast("先にAPIキーを入力してください"); return; }
+    logDiag("", "接続テスト: GET https://api.openai.com/v1/models（テスト用キーは引数で渡し、保存済みのキーには触れません）");
+    /* グローバルの apiKey は変更せず、テスト対象のキーを引数で渡す */
+    oaiCall(OPENAI_BASE+"/models", { method:"GET", headers:oaiHeaders(false, k) }, 15000, "json", "models")
+      .then(function(data){
+        var n=(data && data.data && data.data.length) || 0;
+        logDiag("ok", "接続テスト成功: api.openai.com に疎通しました（利用可能モデル "+n+" 件）。ただし音声・翻訳処理は未検証です");
+        setKeyUI("接続テスト成功：このキーでOpenAI APIに接続できます（音声・翻訳処理は未検証）。", false);
+        toast("OpenAI APIに接続できました（音声・翻訳は未検証）");
+      })
+      .catch(function(e){
+        logDiag("e", "接続テスト失敗: "+errMsg(e));
+        setKeyUI("接続テスト失敗："+errMsg(e), true);
+        showError("<b>OpenAI APIに接続できませんでした。</b> 詳細：<span class=\"mono\">"+esc(errMsg(e))+"</span><ul><li>401 の場合はキーが間違っているか失効しています。429 の場合はレート制限、insufficient_quota 系の場合はAPI側の残高・クレジットを確認してください。</li></ul>");
+      });
+  });
+
+  /* ---------- waveform ---------- */
+  var wctx=wave.getContext("2d");
+  function drawWave(){
+    var W=wave.width, H=wave.height;
+    wctx.clearRect(0,0,W,H);
+    var bars=42, bw=W/bars;
+    var dark=window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    wctx.fillStyle=(mode==="recording"||mode==="browser-listening") ? (dark?"#31bfa9":"#0b6e5d") : (dark?"#3d4741":"#c6bfa9");
+    var data=null;
+    if(analyser){ data=new Uint8Array(analyser.frequencyBinCount); analyser.getByteFrequencyData(data); }
+    for(var i=0;i<bars;i++){
+      var v;
+      if(data){ v=data[Math.floor(i/bars*data.length*0.7)]/255; }
+      else if(mode==="recording"||mode==="browser-listening"){ v=0.25+0.22*Math.abs(Math.sin(Date.now()/240+i*0.7)); }
+      else { v=0.08; }
+      var h=Math.max(3, v*(H-8));
+      var x=i*bw+bw*0.22, w=Math.max(2,bw*0.56);
+      wctx.beginPath();
+      if(wctx.roundRect) wctx.roundRect(x,(H-h)/2,w,h,3); else wctx.rect(x,(H-h)/2,w,h);
+      wctx.fill();
+    }
+    if(mode==="recording"||mode==="browser-listening"||analyser) waveRAF=requestAnimationFrame(drawWave);
+  }
+  function attachAnalyser(stream){
+    try{
+      audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+      if(audioCtx.state==="suspended") audioCtx.resume();
+      var node=audioCtx.createMediaStreamSource(stream);
+      analyser=audioCtx.createAnalyser(); analyser.fftSize=128;
+      node.connect(analyser);
+    }catch(e){ analyser=null; }
+  }
+  var waveStream=null; /* ブラウザ認識時の波形表示専用ストリーム */
+  function releaseStream(){
+    if(waveStream){ waveStream.getTracks().forEach(function(t){ t.stop(); }); waveStream=null; }
+    analyser=null;
+    if(waveRAF) cancelAnimationFrame(waveRAF);
+    drawWave();
+  }
+  /* 録音セッション共通クリーンアップ：どの経路（失敗・終了・終端エラー）でも必ずトラックを止める */
+  function cleanupRecSession(session){
+    if(!session) return;
+    if(session.stream){
+      try{ session.stream.getTracks().forEach(function(t){ t.stop(); }); }catch(e){}
+      session.stream=null;
+    }
+    if(recSession===session) recSession=null;
+    analyser=null;
+    if(waveRAF) cancelAnimationFrame(waveRAF);
+    drawWave();
+  }
+
+  /* ---------- deck / status ---------- */
+  function updateDeckText(){
+    if(mode==="recording"){
+      deckState.textContent="録音中 — もう一度押すと送信します";
+      deckSub.textContent="話し終わったらボタンを押してください。録音がOpenAIに送られ、文字起こしされます。";
+    } else if(mode==="processing"){
+      deckState.textContent="AIが処理中…";
+      deckSub.textContent="文字起こしと翻訳をしています。少しお待ちください。";
+    } else if(mode==="browser-listening"){
+      deckState.textContent="聞き取り中 — "+langByCode(srcSel.value).name+"で話してください";
+      deckSub.textContent="文が確定すると自動で翻訳して読み上げます。もう一度押すと止まります。";
+    } else {
+      deckState.textContent="タップして録音スタート";
+      deckSub.textContent=aiOn
+        ? "AI経路：押して話す → もう一度押して送信（AI文字起こし＋GPT翻訳＋AI音声）。"
+        : "無料経路：ブラウザの音声認識で聞き取ります。AI経路にするには上のAPIキーを設定してください。";
+    }
+    micBtn.classList.toggle("listening", mode==="recording"||mode==="browser-listening");
+    micBtn.classList.toggle("busy", mode==="processing");
+    micBtn.disabled=(mode==="processing");
+    micBtn.setAttribute("aria-label", (mode==="recording")?"録音を終えて送信":(mode==="browser-listening")?"聞き取りを停止":"録音を開始");
+    statusDot.className="dot"+((mode==="recording"||mode==="browser-listening")?" on":(mode==="processing"?"":" ready"));
+    /* マイク状態とは別に、処理フェーズ（翻訳中・音声生成中・再生中）を区別して表示する */
+    var phaseLabel={ transcribing:"文字起こし中", translating:"翻訳中", tts:"音声生成中", playing:"再生中" };
+    if(phase && phaseLabel[phase]) statusText.textContent=phaseLabel[phase];
+    else statusText.textContent=(mode==="recording")?"録音中":(mode==="processing")?"処理中":(mode==="browser-listening")?"聞き取り中":"待機中";
+  }
+  function setMode(m){ mode=m; updateDeckText(); }
+  function setPhase(p){ phase=p; updateDeckText(); }
+
+  /* ---------- history + pipeline ---------- */
+  function engineLabel(engine){
+    if(engine==="gpt") return "AI文字起こし＋GPT翻訳";
+    if(engine==="free") return "無料翻訳";
+    if(engine==="free-fallback") return "GPT失敗→無料翻訳";
+    if(engine==="browser+gpt") return "ブラウザ認識＋GPT";
+    if(engine==="browser") return "ブラウザ認識＋無料翻訳";
+    return engine||"";
+  }
+  function addHistory(origText, srcCode, tgtCode, sttEngine, sttModel){
+    entrySeq++;
+    var empty=$("histEmpty"); if(empty) empty.remove();
+    var entry=document.createElement("div"); entry.className="entry";
+    var now=new Date();
+    function p(x){ return String(x).padStart(2,"0"); }
+    entry.innerHTML=
+      '<div class="meta"><span class="dir">'+esc(langByCode(srcCode).name)+" → "+esc(langByCode(tgtCode).name)+'</span><span class="mono">'+p(now.getHours())+":"+p(now.getMinutes())+":"+p(now.getSeconds())+'</span><span class="engine"></span><span class="lat mono"></span></div>'+
+      '<div class="orig">'+esc(origText)+'</div>'+
+      '<div class="tran pending">翻訳中…</div>'+
+      '<div class="acts"><button class="mini replay" type="button">🔊 もう一度聞く</button><button class="mini copyt" type="button">訳文をコピー</button><button class="mini copyo" type="button">原文をコピー</button></div>';
+    histList.insertBefore(entry, histList.firstChild);
+    histCount.textContent=entrySeq+" 文";
+    var tranEl=entry.querySelector(".tran");
+    var data={ orig:origText, tran:"", tgt:tgtCode };
+    entry.querySelector(".replay").addEventListener("click", function(){ if(data.tran) speak(data.tran, data.tgt); else toast("まだ翻訳が終わっていません"); });
+    entry.querySelector(".copyt").addEventListener("click", function(){ copyText(data.tran||""); });
+    entry.querySelector(".copyo").addEventListener("click", function(){ copyText(data.orig); });
+    var t0=performance.now();
+    setPhase("translating");
+    return translateAny(origText, srcCode, tgtCode).then(function(res){
+      var ms=Math.round(performance.now()-t0);
+      $("latencyPill").textContent="処理 "+ms+" ms";
+      entry.querySelector(".lat").textContent=ms+" ms";
+      var label=engineLabel(sttEngine==="whisper" ? (res.engine==="gpt"?"gpt":"free-fallback") : (res.engine==="gpt"?"browser+gpt":(res.engine==="free-fallback"?"free-fallback":"browser")));
+      if(sttEngine==="keyboard") label=engineLabel(res.engine==="gpt"?"gpt":res.engine);
+      if(sttModel) label+=" ・ 文字起こし: "+sttModel;
+      if(res.model) label+=" ・ 翻訳: "+res.model;
+      if(res.truncated) label+=" ・ 途中までの結果（長さ制限で打ち切り）";
+      entry.querySelector(".engine").textContent=label;
+      data.tran=res.text;
+      tranEl.textContent=res.text+(res.truncated?"（途中までの結果：長さ制限で打ち切られました）":"");
+      tranEl.className="tran";
+      tgtLive.textContent=res.text;
+      tgtTag.textContent=res.truncated?"途中まで":"確定"; tgtTag.className="tag"+(res.engine==="gpt"?" ai":"");
+      tgtSub.textContent=label+" ・ 読み上げ"+(autoSpeak?"します":"はOFFです");
+      setPhase(null);
+      var speechDone=autoSpeak ? speak(res.text, tgtCode) : Promise.resolve();
+      if(convoMode){
+        /* 固定時間ではなく、読み上げの完了・失敗・停止に連動して言語を切り替える */
+        speechDone.then(function(){
+          if(mode==="idle" || mode==="browser-listening"){
+            swapLangs();
+            toast("相手の番です："+langByCode(srcSel.value).name+" → "+langByCode(tgtSel.value).name);
+            if(mode==="browser-listening" && recog){ try{ recog.stop(); }catch(e){} }
+          }
+        });
+      }
+    }).catch(function(err){
+      tranEl.textContent="翻訳に失敗しました（詳細: "+(err&&err.message?err.message:"不明")+"）";
+      tranEl.className="tran failed";
+      logDiag("e", "翻訳が最終的に失敗しました: "+errMsg(err));
+      tgtLive.innerHTML='<span class="placeholder">翻訳に失敗しました。詳細は診断ログに出ています。</span>';
+    }).then(function(){ if(phase==="translating") setPhase(null); });
+  }
+  $("clearBtn").addEventListener("click", function(){
+    histList.innerHTML='<div class="empty" id="histEmpty">話した内容と翻訳が、ここに時系列で残ります。各文はボタンで再読み上げ・コピーができます。</div>';
+    entrySeq=0; histCount.textContent="まだ何もありません"; toast("ログを消しました");
+  });
+
+  /* ---------- AI path: record -> transcribe -> translate ---------- */
+  function pickMime(){
+    var candidates=["audio/webm;codecs=opus","audio/webm","audio/mp4","audio/ogg;codecs=opus","audio/ogg"];
+    if(!("MediaRecorder" in window)) return "";
+    for(var i=0;i<candidates.length;i++){
+      try{ if(MediaRecorder.isTypeSupported(candidates[i])) return candidates[i]; }catch(e){}
+    }
+    return "";
+  }
+  var recPending=null; /* getUserMedia 取得中のセッション（停止されたら結果を破棄する） */
+  function startRecording(){
+    showError("");
+    if(recStarting || recSession){
+      logDiag("", "録音の開始を抑止しました（二重開始防止：取得中または録音中のセッションがあります）");
+      return;
+    }
+    if(!hasRecorder){
+      logDiag("e", "録音を開始できません: MediaRecorder / getUserMedia がありません");
+      showError("<b>この画面では録音できません。</b>埋め込み表示では録音APIが塞がれることがあります。ブラウザで直接開くか、キーボード入力を使ってください。");
+      return;
+    }
+    recStarting=true;
+    var session={ id:++recSessionSeq, stream:null, recorder:null, chunks:[], startedAt:0, stopped:false, handled:false, cancelled:false };
+    recPending=session;
+    navigator.mediaDevices.getUserMedia({ audio:true }).then(function(stream){
+      recStarting=false;
+      if(recPending===session) recPending=null;
+      if(session.cancelled || session.id!==recSessionSeq){
+        /* 停止後に届いた古い getUserMedia の結果は使わず、トラックを止めて破棄する */
+        try{ stream.getTracks().forEach(function(t){ t.stop(); }); }catch(e){}
+        logDiag("", "停止後に届いた古いマイク取得結果を破棄しました（セッション #"+session.id+"）");
+        return;
+      }
+      session.stream=stream;
+      recSession=session;
+      attachAnalyser(stream);
+      var mime=pickMime();
+      try{
+        session.recorder=mime? new MediaRecorder(stream, { mimeType:mime }) : new MediaRecorder(stream);
+      }catch(e){
+        session.recorder=new MediaRecorder(stream);
+      }
+      var rec=session.recorder;
+      logDiag("ai", "録音開始（セッション #"+session.id+" / 形式: "+(rec.mimeType||mime||"既定")+"）— OpenAI文字起こし経路");
+      rec.ondataavailable=function(ev){ if(ev.data && ev.data.size>0) session.chunks.push(ev.data); };
+      rec.onstop=function(){ onRecordingStop(session); };
+      rec.onerror=function(ev){
+        logDiag("e", "録音の終端エラー（セッション #"+session.id+"）: "+errMsg(ev&&ev.error));
+        failRecording(session, "録音中にエラーが発生しました");
+      };
+      try{ rec.start(250); }catch(e){ failRecording(session, "録音を開始できませんでした: "+errMsg(e)); return; }
+      session.startedAt=Date.now();
+      setMode("recording");
+      srcTag.textContent="録音中"; srcTag.className="tag live";
+      srcLive.innerHTML='<span class="placeholder">録音中…話し終わったらもう一度ボタンを押してください。</span>';
+      drawWave();
+      clearInterval(recordTimer);
+      recordTimer=setInterval(function(){
+        if(recSession!==session) return;
+        var sec=Math.floor((Date.now()-session.startedAt)/1000);
+        srcSub.textContent="録音 "+sec+" 秒（目安は60秒まで）";
+        if(sec>=60){ logDiag("", "60秒に達したため自動で送信します"); stopRecording(); }
+      }, 500);
+    }).catch(function(e){
+      recStarting=false;
+      if(recPending===session) recPending=null;
+      if(session.cancelled){ logDiag("", "キャンセル済みセッションのマイク取得失敗を破棄しました"); return; }
+      logDiag("e", "マイク取得に失敗: "+errMsg(e));
+      showError("<b>マイクを使えませんでした。</b> 詳細：<span class=\"mono\">"+esc(errMsg(e))+"</span><ul><li>ブラウザのマイク許可が「拒否」になっていないか確認してください。埋め込み表示では許可ダイアログ自体が出ないことがあります。</li></ul>");
+    });
+  }
+  function stopRecording(){
+    var session=recSession;
+    if(!session) return;
+    session.stopped=true;
+    if(session.recorder && session.recorder.state!=="inactive"){
+      try{ session.recorder.stop(); }catch(e){ logDiag("e", "録音停止で例外: "+errMsg(e)); onRecordingStop(session); }
+    } else {
+      onRecordingStop(session);
+    }
+  }
+  /* 失敗時の共通後片付け：タイマー停止＋セッション破棄＋状態を待機へ戻す */
+  function failRecording(session, msg){
+    if(session.handled) return;
+    session.handled=true;
+    clearInterval(recordTimer);
+    cleanupRecSession(session);
+    srcTag.textContent="失敗"; srcTag.className="tag";
+    setMode("idle");
+    showError("<b>"+esc(msg)+"。</b>マイクの許可状態を確認するか、もう一度お試しください。詳細は診断ログに出ています。");
+  }
+  function onRecordingStop(session){
+    if(!session || session.handled) return;
+    session.handled=true;
+    clearInterval(recordTimer);
+    var type=(session.recorder && session.recorder.mimeType) || "audio/webm";
+    var blob=new Blob(session.chunks, { type:type });
+    var secs=session.startedAt? ((Date.now()-session.startedAt)/1000).toFixed(1) : "0.0";
+    cleanupRecSession(session);
+    if(blob.size<1200){
+      logDiag("e", "録音が短すぎます（"+blob.size+" bytes / "+secs+"秒）。送信しませんでした");
+      srcLive.innerHTML='<span class="placeholder">録音が短すぎました。もう少し長く話してから送信してください。</span>';
+      srcTag.textContent="待機"; srcTag.className="tag";
+      setMode("idle");
+      return;
+    }
+    setMode("processing");
+    setPhase("transcribing");
+    srcTag.textContent="文字起こし中"; srcTag.className="tag ai";
+    srcSub.textContent="OpenAIで文字起こししています…（"+secs+"秒の録音）";
+    var sc=srcSel.value, tc=tgtSel.value, t0=performance.now();
+    oaiTranscribe(blob, sc).then(function(res){
+      logDiag("ok", "文字起こし成功（モデル: "+res.model+" / "+Math.round(performance.now()-t0)+" ms）: "+res.text.slice(0,60));
+      srcLive.textContent=res.text;
+      srcTag.textContent="確定"; srcTag.className="tag";
+      srcSub.textContent="";
+      addHistory(res.text, sc, tc, "whisper", res.model);
+    }).catch(function(e){
+      srcTag.textContent="失敗"; srcTag.className="tag";
+      logDiag("e", "文字起こしに失敗（フォールバック後）: "+errMsg(e));
+      showError("<b>文字起こし（OpenAI）に失敗しました。</b> 詳細：<span class=\"mono\">"+esc(errMsg(e))+"</span><ul><li>APIキーが有効か、接続テストが通るか、API側の残高・クレジットがあるかを確認してください（詳細は診断ログ）。</li><li>キーを削除するとブラウザ認識の無料経路で試せます。</li></ul>");
+    }).then(function(){
+      /* 成功・失敗どちらの経路でも、処理中状態は必ず解除する */
+      if(phase==="transcribing") setPhase(null);
+      if(mode==="processing") setMode("idle");
+    });
+  }
+
+  /* ---------- fallback path: browser speech recognition ---------- */
+  /* 確定文は落とさずキューに入れ、1件ずつ順番に処理する */
+  function processFinalQueue(){
+    if(finalQueueBusy) return;
+    var item=finalQueue.shift();
+    if(!item) return;
+    finalQueueBusy=true;
+    var p;
+    try{ p=addHistory(item.text, item.src, item.tgt, "browser"); }catch(e){ p=null; }
+    function next(){ finalQueueBusy=false; processFinalQueue(); }
+    if(p && p.then) p.then(next, next); else next();
+  }
+  function createRecognition(){
+    if(!SR) return null;
+    var r=new SR();
+    r.continuous=true; r.interimResults=true; r.maxAlternatives=1;
+    r.lang=langByCode(srcSel.value).recog;
+    var sessionId=++recogSessionSeq;
+    recogSeen={};
+    r._sessionId=sessionId;
+    r.onstart=function(){ logDiag("ok", "ブラウザ認識が開始しました（onstart / セッション #"+sessionId+"） lang="+r.lang); $("sttPill").textContent="音声認識：ブラウザ経路で動作中"; };
+    r.onresult=function(ev){
+      if(r._sessionId!==recogSessionSeq) return; /* 古いセッションの結果は破棄 */
+      var interim="";
+      for(var i=ev.resultIndex;i<ev.results.length;i++){
+        var res=ev.results[i];
+        if(res.isFinal){
+          /* 時間ベースの抑制はせず、セッション＋結果インデックスで重複を管理する */
+          if(recogSeen[i]) continue;
+          recogSeen[i]=true;
+          var sentence=(res[0].transcript||"").trim();
+          if(sentence){
+            srcLive.textContent=sentence;
+            srcTag.textContent="確定"; srcTag.className="tag";
+            finalQueue.push({ text:sentence, src:srcSel.value, tgt:tgtSel.value });
+            processFinalQueue();
+          }
+        } else {
+          interim+=res[0].transcript;
+        }
+      }
+      if(interim){
+        srcLive.innerHTML='<span class="interim">'+esc(interim)+"</span>";
+        srcTag.textContent="聞き取り中"; srcTag.className="tag live";
+      }
+    };
+    r.onerror=function(ev){
+      var code=(ev&&ev.error)||"unknown";
+      logDiag("e", "ブラウザ認識エラー（onerror） code="+code);
+      $("sttPill").textContent="音声認識：エラー（"+code+"）";
+      $("sttPill").className="pill warn";
+      if(code==="no-speech"||code==="aborted") return;
+      shouldListen=false;
+      showError("<b>ブラウザ音声認識エラー：</b> <span class=\"mono\">"+esc(code)+"</span> — 埋め込み表示では認識API自体が塞がれることがあります。AI経路（録音→Whisper）は録音APIさえ通ればこの制限を受けません。");
+      setMode("idle");
+    };
+    r.onend=function(){
+      if(shouldListen){
+        setTimeout(function(){ if(shouldListen){ try{ recogSeen={}; recog.lang=langByCode(srcSel.value).recog; recog.start(); }catch(e){ logDiag("e", "認識の再起動で例外: "+errMsg(e)); shouldListen=false; setMode("idle"); } } }, 350);
+      } else { setMode("idle"); }
+    };
+    return r;
+  }
+  function startBrowserListening(){
+    showError("");
+    recog=createRecognition();
+    if(!recog) return;
+    shouldListen=true;
+    srcLive.innerHTML='<span class="placeholder">聞き取り中…話し始めてください。</span>';
+    try{ recog.start(); }catch(e){
+      shouldListen=false;
+      logDiag("e", "ブラウザ認識の start() 例外: "+errMsg(e));
+      showError("<b>ブラウザ音声認識を開始できませんでした。</b> 例外：<span class=\"mono\">"+esc(errMsg(e))+"</span>");
+      return;
+    }
+    setMode("browser-listening");
+    if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
+      navigator.mediaDevices.getUserMedia({ audio:true }).then(function(stream){
+        if(!shouldListen){ try{ stream.getTracks().forEach(function(t){ t.stop(); }); }catch(e){} return; }
+        waveStream=stream; attachAnalyser(stream); drawWave();
+      }).catch(function(){ /* wave only */ });
+    }
+  }
+  function stopBrowserListening(){
+    shouldListen=false;
+    recogSessionSeq++; /* セッションを進め、停止後に届く古い結果を無効化する */
+    finalQueue=[];
+    if(recog){ try{ recog.stop(); }catch(e){} }
+    releaseStream();
+    setMode("idle");
+  }
+
+  /* ---------- mic button ---------- */
+  micBtn.addEventListener("click", function(){
+    if(mode==="processing") return;
+    if(recStarting){
+      /* マイク取得中に押されたら、そのセッションをキャンセルする（結果が届いても破棄される） */
+      if(recPending){ recPending.cancelled=true; recSessionSeq++; }
+      recStarting=false;
+      logDiag("", "マイク取得中のセッションをキャンセルしました");
+      return;
+    }
+    if(mode==="recording"){ stopRecording(); return; }
+    if(mode==="browser-listening"){ stopBrowserListening(); return; }
+    if(aiOn){ startRecording(); }
+    else if(SR){ startBrowserListening(); }
+    else if(hasRecorder){
+      showError("<b>AI経路が未設定で、ブラウザ音声認識もこの画面にはありません。</b><ul><li>上の設定にOpenAI APIキーを入れると、録音→Whisperの経路で使えます（この画面でも録音APIは使えます）。</li><li>キーがまだ無い場合は、Safari／Chromeで直接開くとブラウザ認識が使えることがあります。</li></ul>");
+      logDiag("e", "開始できません: APIキー未設定かつブラウザ認識APIなし（録音APIはあり）");
+    }
+    else {
+      showError("<b>この画面ではマイク入力が使えません。</b>キーボード入力を使ってください。");
+    }
+  });
+
+  /* ---------- manual input ---------- */
+  $("manualBtn").addEventListener("click", function(){
+    var text=$("manualText").value.trim();
+    if(!text){ toast("文を入力してください"); return; }
+    srcLive.textContent=text;
+    srcTag.textContent="入力"; srcTag.className="tag";
+    addHistory(text, srcSel.value, tgtSel.value, "keyboard");
+  });
+  $("manualText").addEventListener("keydown", function(e){
+    if((e.metaKey||e.ctrlKey) && e.key==="Enter"){ $("manualBtn").click(); }
+  });
+
+  /* ---------- download single-file HTML (for GitHub Pages) ---------- */
+  $("downloadHtml").addEventListener("click", function(){
+    /* 配布用にサニタイズする：現在のDOMをそのまま書き出すと、会話履歴・ライブ表示・
+       診断ログ・入力中のキー等が混入するため、複製側で初期状態に戻してから書き出す */
+    var clone=document.documentElement.cloneNode(true);
+    function cq(sel){ return clone.querySelector(sel); }
+    var keyInput=cq("#apiKey"); if(keyInput){ keyInput.removeAttribute("value"); keyInput.value=""; }
+    var keyState=cq("#keyState"); if(keyState) keyState.textContent="";
+    var hist=cq("#histList"); if(hist) hist.innerHTML='<div class="empty" id="histEmpty">話した内容と翻訳が、ここに時系列で残ります。各文はボタンで再読み上げ・コピーができます。</div>';
+    var histCountEl=cq("#histCount"); if(histCountEl) histCountEl.textContent="まだ何もありません";
+    var sl=cq("#srcLive"); if(sl) sl.innerHTML='<span class="placeholder">マイクボタンを押して話し、もう一度押すと翻訳します。</span>';
+    var tl=cq("#tgtLive"); if(tl) tl.innerHTML='<span class="placeholder">翻訳結果がここに出ます。確定した文は自動で読み上げます。</span>';
+    var ss=cq("#srcSub"); if(ss) ss.textContent="";
+    var ts=cq("#tgtSub"); if(ts) ts.textContent="";
+    var dl=cq("#diagLog"); if(dl) dl.innerHTML="";
+    var mt=cq("#manualText"); if(mt){ mt.removeAttribute("value"); mt.value=""; mt.textContent=""; }
+    var eb=cq("#errorBanner"); if(eb){ eb.className="banner err"; eb.innerHTML=""; }
+    var sb2=cq("#supportBanner"); if(sb2){ sb2.className="banner info"; sb2.innerHTML=""; }
+    var toastC=cq("#toast"); if(toastC){ toastC.textContent=""; toastC.classList.remove("show"); }
+    var st=cq("#statusText"); if(st) st.textContent="待機中";
+    var ap=cq("#aiPill"); if(ap){ ap.textContent="AI経路：キー未設定（無料経路で動作）"; ap.className="pill"; }
+    var sd=cq("#statusDot"); if(sd) sd.className="dot";
+    var lp=cq("#latencyPill"); if(lp) lp.textContent="処理 — ms";
+    var html="<!doctype html>\n"+clone.outerHTML;
+    var blob=new Blob([html], { type:"text/html;charset=utf-8" });
+    var a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download="index.html";
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 800);
+    logDiag("", "単体HTMLをダウンロードしました（APIキーは含まれていません）");
+    toast("index.html を保存しました。新規リポジトリに置いてください");
+  });
+
+  refreshLangUI();
+  setKeyUI("", false);
+  drawWave();
+})();
+</script>
+</body>
+</html>
