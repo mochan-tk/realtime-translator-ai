@@ -417,6 +417,7 @@
   var recog=null, shouldListen=false;
   var recogSessionSeq=0, recogSeen=null, finalQueue=[], finalQueueBusy=false;
   var currentAudio=null, currentAudioUrl=null;
+  var hasPrevTranslation=false; /* 訳文パネルに前回の確定訳文が残っているか（次の結果が表示されるまで消さない） */
   /* 読み上げ：発話IDと世代カウンタで順序と停止の無効化を管理し、直列キューで再生する */
   var speechSeq=0, speechGen=0, speechQueue=[], speechBusy=false, speechCurrentResolve=null, activePlaybackFinish=null;
 
@@ -827,9 +828,15 @@
   function swapLangs(){
     var a=srcSel.value; srcSel.value=tgtSel.value; tgtSel.value=a;
     refreshLangUI();
-    srcLive.innerHTML='<span class="placeholder">'+esc(langByCode(srcSel.value).name)+'で話してください。</span>';
-    tgtLive.innerHTML='<span class="placeholder">'+esc(langByCode(tgtSel.value).name)+'に翻訳します。</span>';
-    srcTag.textContent="待機"; srcTag.className="tag"; tgtTag.textContent="待機"; tgtTag.className="tag";
+    /* 原文・訳文はここで消さない。前回の表示は、次の結果が表示される直前にだけ置き換わる。
+       特に双方向モードでは、相手の番が始まっても直前の訳文を読み続けられるようにする。 */
+    srcTag.textContent="前回"; srcTag.className="tag";
+    if(hasPrevTranslation){
+      tgtTag.textContent="前回の訳文"; tgtTag.className="tag";
+      tgtSub.textContent="言語を入れ替えました。前の訳文は、次の翻訳結果が表示されるまでこのまま残ります。";
+    } else {
+      tgtTag.textContent="待機"; tgtTag.className="tag";
+    }
   }
   $("swapBtn").addEventListener("click", swapLangs);
   srcSel.addEventListener("change", refreshLangUI);
@@ -1050,6 +1057,12 @@
     entry.querySelector(".copyo").addEventListener("click", function(){ copyText(data.orig); });
     var t0=performance.now();
     setPhase("translating");
+    /* 前回の訳文は消さない。新しい訳文が届いた瞬間（成功時の代入）でのみ置き換えるので、
+       翻訳が走っている間も直前の結果を読み続けられる。 */
+    if(hasPrevTranslation){
+      tgtTag.textContent="翻訳中"; tgtTag.className="tag live";
+      tgtSub.textContent="翻訳中… 前の訳文を表示したままにしています。新しい訳文が表示されるまで残ります。";
+    }
     return translateAny(origText, srcCode, tgtCode).then(function(res){
       var ms=Math.round(performance.now()-t0);
       $("latencyPill").textContent="処理 "+ms+" ms";
@@ -1064,6 +1077,7 @@
       tranEl.textContent=res.text+(res.truncated?"（途中までの結果：長さ制限で打ち切られました）":"");
       tranEl.className="tran";
       tgtLive.textContent=res.text;
+      hasPrevTranslation=true;
       tgtTag.textContent=res.truncated?"途中まで":"確定"; tgtTag.className="tag"+(res.engine==="gpt"?" ai":"");
       tgtSub.textContent=label+" ・ 読み上げ"+(autoSpeak?"します":"はOFFです");
       setPhase(null);
@@ -1082,7 +1096,9 @@
       tranEl.textContent="翻訳に失敗しました（詳細: "+(err&&err.message?err.message:"不明")+"）";
       tranEl.className="tran failed";
       logDiag("e", "翻訳が最終的に失敗しました: "+errMsg(err));
-      tgtLive.innerHTML='<span class="placeholder">翻訳に失敗しました。詳細は診断ログに出ています。</span>';
+      /* 失敗では前回の訳文を消さない（新しい訳文が表示される場合にだけ置き換える） */
+      tgtTag.textContent="失敗"; tgtTag.className="tag";
+      tgtSub.textContent="翻訳に失敗しました。"+(hasPrevTranslation?"前の訳文はそのまま残しています。":"")+"詳細は診断ログに出ています。";
     }).then(function(){ if(phase==="translating") setPhase(null); });
   }
   $("clearBtn").addEventListener("click", function(){
@@ -1144,7 +1160,9 @@
       session.startedAt=Date.now();
       setMode("recording");
       srcTag.textContent="録音中"; srcTag.className="tag live";
-      srcLive.innerHTML='<span class="placeholder">録音中…話し終わったらもう一度ボタンを押してください。</span>';
+      /* 原文・訳文パネルは録音開始では消さない。前回の表示は次の結果が出る直前まで残し、
+         録音中であることはタグと下の経過秒数で示す。 */
+      if(hasPrevTranslation) tgtSub.textContent="録音中… 前の訳文は次の翻訳結果が表示されるまで残ります。";
       drawWave();
       clearInterval(recordTimer);
       recordTimer=setInterval(function(){
@@ -1191,7 +1209,7 @@
     cleanupRecSession(session);
     if(blob.size<1200){
       logDiag("e", "録音が短すぎます（"+blob.size+" bytes / "+secs+"秒）。送信しませんでした");
-      srcLive.innerHTML='<span class="placeholder">録音が短すぎました。もう少し長く話してから送信してください。</span>';
+      srcSub.textContent="録音が短すぎました。もう少し長く話してから送信してください。";
       srcTag.textContent="待機"; srcTag.className="tag";
       setMode("idle");
       return;
@@ -1286,7 +1304,9 @@
     recog=createRecognition();
     if(!recog) return;
     shouldListen=true;
-    srcLive.innerHTML='<span class="placeholder">聞き取り中…話し始めてください。</span>';
+    /* 聞き取り開始でも前回の原文・訳文は消さない。新しい文が確定したときに置き換わる。 */
+    srcTag.textContent="聞き取り中"; srcTag.className="tag live";
+    if(hasPrevTranslation) tgtSub.textContent="聞き取り中… 前の訳文は次の翻訳結果が表示されるまで残ります。";
     try{ recog.start(); }catch(e){
       shouldListen=false;
       logDiag("e", "ブラウザ認識の start() 例外: "+errMsg(e));
