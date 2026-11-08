@@ -79,6 +79,9 @@
     background:var(--surface2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 12px center;
     border:1px solid var(--line2);border-radius:10px;padding:11px 34px 11px 12px;min-height:48px}
   select.small{font-size:14px;min-height:44px}
+  select:disabled{opacity:.5}
+  .swap:disabled{opacity:.45;cursor:not-allowed}
+  .chip:disabled{opacity:.45;cursor:not-allowed}
   select:focus-visible,button:focus-visible,textarea:focus-visible,input:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
   .swap{width:44px;height:48px;border-radius:10px;border:1px solid var(--line2);background:var(--teal-soft);color:var(--teal);font-size:19px;cursor:pointer;display:grid;place-items:center}
   .swap:active{transform:scale(.94)}
@@ -264,6 +267,10 @@
       <button class="chip" type="button" data-src="ja" data-tgt="ko">日本語 → 韓国語</button>
       <span class="hint">深圳では「日→中」と双方向モードが便利です</span>
     </div>
+    <button class="toggle" id="tglAutoJa" type="button" aria-pressed="false" style="margin-top:12px">
+      <span class="sw" aria-hidden="true"></span>
+      <span><b>聞き取りモード（自動判定 → 日本語）</b><span class="d">ONのとき、話す言語をAIが自動判定し、常に日本語に訳して日本語音声で読み上げます。検出された言語は原文パネルに表示します。日本語で話した場合は訳さず、そのまま表示・読み上げします。通常の言語ペア選択はそのまま保持され、OFFに戻すと元に戻ります。OpenAI APIキーが必要です。</span></span>
+    </button>
   </section>
 
   <div class="banner info" id="supportBanner" role="alert"></div>
@@ -407,7 +414,7 @@
   var apiKey="", aiOn=false;
   try{ apiKey=window.localStorage.getItem(LS_KEY)||""; }catch(e){ apiKey=""; }
   aiOn=!!apiKey;
-  var autoSpeak=true, convoMode=false, extFallback=false;
+  var autoSpeak=true, convoMode=false, extFallback=false, autoJa=false, lastDetectedLabel="";
   var mode="idle"; /* idle | recording | processing | browser-listening */
   var phase=null; /* null | transcribing | translating | tts | playing （マイク状態とは別に表示する処理フェーズ） */
   var entrySeq=0;
@@ -531,18 +538,50 @@
   }
 
   /* ---------- OpenAI direct path (BYOK) ---------- */
+  /* 検出言語の表記ゆれ（ISOコード／英語名）を LANGS のコードへ寄せる */
+  function normalizeDetected(raw){
+    if(!raw) return null;
+    var r=String(raw).trim().toLowerCase();
+    if(!r) return null;
+    var i,l;
+    for(i=0;i<LANGS.length;i++){ l=LANGS[i]; if(r===l.code.toLowerCase() || r===l.oai.toLowerCase() || r===l.en.toLowerCase()) return l; }
+    if(r.indexOf("chinese")>=0 || r.indexOf("mandarin")>=0 || r.indexOf("cantonese")>=0) return langByCode("zh-CN");
+    for(i=0;i<LANGS.length;i++){ l=LANGS[i]; if(r.indexOf(l.en.toLowerCase().split(" ")[0])>=0) return l; }
+    return null;
+  }
   function oaiTranscribeOnce(blob, srcCode, model){
-    var fd=new FormData();
-    var ext=(blob.type.indexOf("mp4")>=0)?"mp4":(blob.type.indexOf("ogg")>=0)?"ogg":"webm";
-    fd.append("file", blob, "utterance."+ext);
-    fd.append("model", model);
-    fd.append("language", langByCode(srcCode).oai);
-    return oaiCall(OPENAI_BASE+"/audio/transcriptions", { method:"POST", headers:oaiHeaders(false), body:fd }, 45000, "json", "transcribe("+model+")")
-      .then(function(data){
-        var text=(data && data.text || "").trim();
-        if(!text) throw new Error("transcribe empty（文字起こし結果が空でした）");
-        return { text:text, model:model };
-      });
+    var isAuto=(srcCode==="auto");
+    function buildForm(verbose){
+      var fd=new FormData();
+      var ext=(blob.type.indexOf("mp4")>=0)?"mp4":(blob.type.indexOf("ogg")>=0)?"ogg":"webm";
+      fd.append("file", blob, "utterance."+ext);
+      fd.append("model", model);
+      /* 自動判定モードでは language を渡さない（モデル側に判定させる）。
+         通常モードは従来どおり選択中の言語を渡す。 */
+      if(!isAuto) fd.append("language", langByCode(srcCode).oai);
+      else if(verbose) fd.append("response_format", "verbose_json");
+      return fd;
+    }
+    function run(verbose){
+      return oaiCall(OPENAI_BASE+"/audio/transcriptions", { method:"POST", headers:oaiHeaders(false), body:buildForm(verbose) }, 45000, "json", "transcribe("+model+")")
+        .then(function(data){
+          var text=(data && data.text || "").trim();
+          if(!text) throw new Error("transcribe empty（文字起こし結果が空でした）");
+          var rawLang=(data && (data.language || data.detected_language)) || "";
+          var det=rawLang ? normalizeDetected(rawLang) : null;
+          return { text:text, model:model, detectedRaw:rawLang, detected:det, detectedLabel: det ? det.name : (rawLang ? String(rawLang) : "") };
+        });
+    }
+    if(!isAuto) return run(false);
+    /* verbose_json 非対応モデルで response_format エラーになった場合は、判定言語なしの通常形式で同じモデルを再試行する */
+    return run(true).catch(function(e){
+      if(isFatalApiError(e)) throw e;
+      if(/response_format|verbose/i.test((e && e.message) || "")){
+        logDiag("e", "verbose_json が使えませんでした（"+model+"）: "+errMsg(e)+" — 通常形式で再試行します（検出言語は表示されません）");
+        return run(false);
+      }
+      throw e;
+    });
   }
   /* 主系 gpt-transcribe → gpt-4o-mini-transcribe → whisper-1。
      ただし 401/403/クォータ系ではモデルを替えても直らないので再試行しない。 */
@@ -605,6 +644,58 @@
       });
     }
     return attempt(0);
+  }
+  /* 自動判定→日本語：入力言語をモデルに判定させ、訳出先は常に日本語。
+     検出言語が分かっている場合は通常の oaiTranslate を使い、ここは検出不能時の受け皿。
+     gpt-6-luna には temperature を送らない（従来モデル時のみ 0.2）という既存ルールはここでも守る。 */
+  function oaiTranslateAutoOnce(text, model){
+    var body={
+      model:model,
+      messages:[
+        { role:"system", content:"You are a professional interpreter for live conversation. Detect the language of the user's message and translate it into Japanese. Output ONLY the Japanese translation itself: no explanations, no quotation marks, no notes. Preserve names, numbers, and the speaker's tone. If the input is already in Japanese, output it unchanged." },
+        { role:"user", content:text }
+      ]
+    };
+    if(model!=="gpt-6-luna") body.temperature=0.2;
+    return oaiCall(OPENAI_BASE+"/chat/completions", { method:"POST", headers:oaiHeaders(true), body:JSON.stringify(body) }, 30000, "json", "translate-auto("+model+")")
+      .then(function(data){
+        var choice=data && data.choices && data.choices[0];
+        if(!choice) throw new Error("translate empty（応答に choices がありませんでした）");
+        var msg=choice.message||{};
+        if(msg.refusal) throw new Error("translate refused（モデルが翻訳を拒否しました: "+msg.refusal+"）");
+        var out=(msg.content||"").trim();
+        if(!out) throw new Error("translate empty（訳文が空でした）");
+        var truncated=!!(choice.finish_reason && choice.finish_reason!=="stop");
+        return { text:out, truncated:truncated, model:model };
+      });
+  }
+  function oaiTranslateAuto(text){
+    var models=MODELS.translate.slice();
+    function attempt(i){
+      return oaiTranslateAutoOnce(text, models[i]).catch(function(e){
+        if(isFatalApiError(e)) throw e;
+        if(i+1<models.length){
+          logDiag("e", "AI翻訳（自動判定）失敗（"+models[i]+"）: "+errMsg(e)+" — "+models[i+1]+" で再試行します");
+          return attempt(i+1);
+        }
+        throw e;
+      });
+    }
+    return attempt(0);
+  }
+  /* 自動判定モード用の翻訳振り分け：日本語入力は訳さずそのまま、検出できれば通常翻訳、できなければ自動判定翻訳 */
+  function translateAutoJa(text, detectedCode){
+    if(detectedCode==="ja") return Promise.resolve({ text:text, engine:"same-lang", truncated:false });
+    if(!aiOn) return Promise.reject(new Error("自動判定モードにはOpenAI APIキーが必要です"));
+    var core=(detectedCode && detectedCode!=="auto")
+      ? oaiTranslate(text, detectedCode, "ja").then(function(res){ return { text:res.text, engine:"gpt", truncated:res.truncated, model:res.model }; })
+      : oaiTranslateAuto(text).then(function(res){ return { text:res.text, engine:"gpt", truncated:res.truncated, model:res.model }; });
+    return core.catch(function(e){
+      if(!extFallback) throw e;
+      logDiag("e", "AI翻訳（自動判定→日本語）に失敗: "+errMsg(e)+" — 外部フォールバックONのため無料翻訳に切り替えます");
+      if(detectedCode && detectedCode!=="auto") return freeTranslate(text, detectedCode, "ja").then(function(out){ return { text:out, engine:"free-fallback", truncated:false }; });
+      throw e;
+    });
   }
   /* AI音声の生成＋再生。play() の失敗も含め、失敗は呼び出し側へ伝播させる（端末音声フォールバックを効かせるため）。
      再生が終わるまで解決しない。 */
@@ -803,8 +894,9 @@
   $("stopSpeakBtn").addEventListener("click", function(){ stopSpeak(); toast("読み上げを止めました"); });
   $("retestBtn").addEventListener("click", function(){
     var samples={ "ja":"テストです。翻訳音声が聞こえますか？", "zh-CN":"你好，这是语音测试。", "zh-TW":"你好，這是語音測試。", "en":"Hello, this is a voice test.", "ko":"안녕하세요, 음성 테스트입니다." };
-    speak(samples[tgtSel.value]||"Hello, this is a voice test.", tgtSel.value);
-    toast(langByCode(tgtSel.value).name+" でテスト音声を再生します");
+    var tc=autoJa ? "ja" : tgtSel.value;
+    speak(samples[tc]||"Hello, this is a voice test.", tc);
+    toast(langByCode(tc).name+" でテスト音声を再生します");
   });
   $("rate").addEventListener("input", function(){ $("rateVal").textContent=(parseFloat(this.value)).toFixed(1)+"×"; });
   function refreshTtsPill(){
@@ -819,13 +911,22 @@
 
   /* ---------- language UI ---------- */
   function refreshLangUI(){
-    $("srcPanelTitle").textContent="原文 ・ "+langByCode(srcSel.value).name;
-    $("tgtPanelTitle").textContent="訳文 ・ "+langByCode(tgtSel.value).name;
+    if(autoJa){
+      $("srcPanelTitle").textContent="原文 ・ 自動判定"+(lastDetectedLabel?"（前回："+lastDetectedLabel+"）":"");
+      $("tgtPanelTitle").textContent="訳文 ・ 日本語（固定）";
+    } else {
+      $("srcPanelTitle").textContent="原文 ・ "+langByCode(srcSel.value).name;
+      $("tgtPanelTitle").textContent="訳文 ・ "+langByCode(tgtSel.value).name;
+    }
+    srcSel.disabled=autoJa; tgtSel.disabled=autoJa;
+    $("swapBtn").disabled=autoJa;
     document.querySelectorAll("#presets .chip").forEach(function(c){
-      c.classList.toggle("active", c.getAttribute("data-src")===srcSel.value && c.getAttribute("data-tgt")===tgtSel.value);
+      c.disabled=autoJa;
+      c.classList.toggle("active", !autoJa && c.getAttribute("data-src")===srcSel.value && c.getAttribute("data-tgt")===tgtSel.value);
     });
   }
   function swapLangs(){
+    if(autoJa) return; /* 自動判定モードでは言語ペアを入れ替えない */
     var a=srcSel.value; srcSel.value=tgtSel.value; tgtSel.value=a;
     refreshLangUI();
     /* 原文・訳文はここで消さない。前回の表示は、次の結果が表示される直前にだけ置き換わる。
@@ -855,6 +956,13 @@
       el.setAttribute("aria-pressed", on?"true":"false"); fn(on);
     });
   }
+  bindToggle("tglAutoJa", false, function(on){
+    autoJa=on; lastDetectedLabel="";
+    refreshLangUI(); updateDeckText();
+    if(on && mode==="browser-listening") stopBrowserListening();
+    logDiag("ai", "聞き取りモード（自動判定 → 日本語）を "+(on?"ON：文字起こしは言語を指定せず自動判定し、訳出先は日本語固定、日本語音声で読み上げます":"OFF：通常の言語ペアに戻ります")+" にしました");
+    toast(on?"聞き取りモード ON：自動判定 → 日本語":"聞き取りモード OFF：通常モードに戻りました");
+  });
   bindToggle("tglSpeak", true, function(on){ autoSpeak=on; if(!on) stopSpeak(); });
   bindToggle("tglConvo", false, function(on){ convoMode=on; toast(on?"双方向モード ON：一文ごとに言語が入れ替わります":"双方向モード OFF"); });
 
@@ -1011,9 +1119,11 @@
       deckSub.textContent="文が確定すると自動で翻訳して読み上げます。もう一度押すと止まります。";
     } else {
       deckState.textContent="タップして録音スタート";
-      deckSub.textContent=aiOn
+      deckSub.textContent=autoJa
+        ? (aiOn ? "聞き取りモード：何語で話してもAIが自動判定し、日本語に訳して読み上げます（日本語はそのまま）。" : "聞き取りモードにはOpenAI APIキーが必要です。上の設定にキーを入れてください。")
+        : (aiOn
         ? "AI経路：押して話す → もう一度押して送信（AI文字起こし＋GPT翻訳＋AI音声）。"
-        : "無料経路：ブラウザの音声認識で聞き取ります。AI経路にするには上のAPIキーを設定してください。";
+        : "無料経路：ブラウザの音声認識で聞き取ります。AI経路にするには上のAPIキーを設定してください。");
     }
     micBtn.classList.toggle("listening", mode==="recording"||mode==="browser-listening");
     micBtn.classList.toggle("busy", mode==="processing");
@@ -1035,16 +1145,20 @@
     if(engine==="free-fallback") return "GPT失敗→無料翻訳";
     if(engine==="browser+gpt") return "ブラウザ認識＋GPT";
     if(engine==="browser") return "ブラウザ認識＋無料翻訳";
+    if(engine==="same-lang") return "日本語のため翻訳なし";
     return engine||"";
   }
-  function addHistory(origText, srcCode, tgtCode, sttEngine, sttModel){
+  function addHistory(origText, srcCode, tgtCode, sttEngine, sttModel, autoInfo){
     entrySeq++;
     var empty=$("histEmpty"); if(empty) empty.remove();
     var entry=document.createElement("div"); entry.className="entry";
     var now=new Date();
     function p(x){ return String(x).padStart(2,"0"); }
+    var dirLabel=autoInfo
+      ? "自動判定"+(autoInfo.detectedLabel?"（"+autoInfo.detectedLabel+"）":"")+" → 日本語"
+      : langByCode(srcCode).name+" → "+langByCode(tgtCode).name;
     entry.innerHTML=
-      '<div class="meta"><span class="dir">'+esc(langByCode(srcCode).name)+" → "+esc(langByCode(tgtCode).name)+'</span><span class="mono">'+p(now.getHours())+":"+p(now.getMinutes())+":"+p(now.getSeconds())+'</span><span class="engine"></span><span class="lat mono"></span></div>'+
+      '<div class="meta"><span class="dir">'+esc(dirLabel)+'</span><span class="mono">'+p(now.getHours())+":"+p(now.getMinutes())+":"+p(now.getSeconds())+'</span><span class="engine"></span><span class="lat mono"></span></div>'+
       '<div class="orig">'+esc(origText)+'</div>'+
       '<div class="tran pending">翻訳中…</div>'+
       '<div class="acts"><button class="mini replay" type="button">🔊 もう一度聞く</button><button class="mini copyt" type="button">訳文をコピー</button><button class="mini copyo" type="button">原文をコピー</button></div>';
@@ -1063,12 +1177,13 @@
       tgtTag.textContent="翻訳中"; tgtTag.className="tag live";
       tgtSub.textContent="翻訳中… 前の訳文を表示したままにしています。新しい訳文が表示されるまで残ります。";
     }
-    return translateAny(origText, srcCode, tgtCode).then(function(res){
+    return (autoInfo ? translateAutoJa(origText, autoInfo.detectedCode || "auto") : translateAny(origText, srcCode, tgtCode)).then(function(res){
       var ms=Math.round(performance.now()-t0);
       $("latencyPill").textContent="処理 "+ms+" ms";
       entry.querySelector(".lat").textContent=ms+" ms";
       var label=engineLabel(sttEngine==="whisper" ? (res.engine==="gpt"?"gpt":"free-fallback") : (res.engine==="gpt"?"browser+gpt":(res.engine==="free-fallback"?"free-fallback":"browser")));
       if(sttEngine==="keyboard") label=engineLabel(res.engine==="gpt"?"gpt":res.engine);
+      if(res.engine==="same-lang") label=engineLabel("same-lang");
       if(sttModel) label+=" ・ 文字起こし: "+sttModel;
       if(res.model) label+=" ・ 翻訳: "+res.model;
       if(res.truncated) label+=" ・ 途中までの結果（長さ制限で打ち切り）";
@@ -1082,7 +1197,7 @@
       tgtSub.textContent=label+" ・ 読み上げ"+(autoSpeak?"します":"はOFFです");
       setPhase(null);
       var speechDone=autoSpeak ? speak(res.text, tgtCode) : Promise.resolve();
-      if(convoMode){
+      if(convoMode && !autoInfo){
         /* 固定時間ではなく、読み上げの完了・失敗・停止に連動して言語を切り替える */
         speechDone.then(function(){
           if(mode==="idle" || mode==="browser-listening"){
@@ -1218,13 +1333,30 @@
     setPhase("transcribing");
     srcTag.textContent="文字起こし中"; srcTag.className="tag ai";
     srcSub.textContent="OpenAIで文字起こししています…（"+secs+"秒の録音）";
-    var sc=srcSel.value, tc=tgtSel.value, t0=performance.now();
+    var isAuto=autoJa;
+    var sc=isAuto ? "auto" : srcSel.value, tc=isAuto ? "ja" : tgtSel.value, t0=performance.now();
     oaiTranscribe(blob, sc).then(function(res){
       logDiag("ok", "文字起こし成功（モデル: "+res.model+" / "+Math.round(performance.now()-t0)+" ms）: "+res.text.slice(0,60));
       srcLive.textContent=res.text;
-      srcTag.textContent="確定"; srcTag.className="tag";
-      srcSub.textContent="";
-      addHistory(res.text, sc, tc, "whisper", res.model);
+      if(isAuto){
+        /* 応答に検出言語が含まれていれば画面に表示する */
+        lastDetectedLabel=res.detectedLabel || "";
+        var detCode=res.detected ? res.detected.code : "";
+        if(res.detectedLabel){
+          logDiag("ai", "検出言語: "+res.detectedLabel+(res.detectedRaw && res.detectedRaw!==res.detectedLabel ? "（応答値: "+res.detectedRaw+"）" : ""));
+          srcTag.textContent="判定："+res.detectedLabel; srcTag.className="tag ai";
+          srcSub.textContent="検出言語："+res.detectedLabel+" → 日本語に翻訳します"+(detCode==="ja"?"（日本語のため訳さずそのまま表示します）":"");
+        } else {
+          srcTag.textContent="確定（言語は未検出）"; srcTag.className="tag";
+          srcSub.textContent="検出言語は応答に含まれませんでした。翻訳時にAIが判定して日本語にします。";
+        }
+        refreshLangUI();
+        addHistory(res.text, detCode || "auto", "ja", "whisper", res.model, { detectedCode:detCode || "", detectedLabel:res.detectedLabel || "" });
+      } else {
+        srcTag.textContent="確定"; srcTag.className="tag";
+        srcSub.textContent="";
+        addHistory(res.text, sc, tc, "whisper", res.model);
+      }
     }).catch(function(e){
       srcTag.textContent="失敗"; srcTag.className="tag";
       logDiag("e", "文字起こしに失敗（フォールバック後）: "+errMsg(e));
@@ -1342,6 +1474,14 @@
     }
     if(mode==="recording"){ stopRecording(); return; }
     if(mode==="browser-listening"){ stopBrowserListening(); return; }
+    if(autoJa){
+      if(aiOn){ startRecording(); }
+      else {
+        showError("<b>聞き取りモード（自動判定 → 日本語）にはOpenAI APIキーが必要です。</b><ul><li>ブラウザの音声認識は聞き取る言語を先に決める必要があり、自動判定ができません。そのため、このモードはAI経路（録音→AI文字起こし）専用です。</li><li>上の設定にAPIキーを入れてから、もう一度お試しください。</li></ul>");
+        logDiag("e", "聞き取りモードを開始できません: APIキー未設定（ブラウザ認識では自動判定できないため）");
+      }
+      return;
+    }
     if(aiOn){ startRecording(); }
     else if(SR){ startBrowserListening(); }
     else if(hasRecorder){
@@ -1358,6 +1498,18 @@
     var text=$("manualText").value.trim();
     if(!text){ toast("文を入力してください"); return; }
     srcLive.textContent=text;
+    if(autoJa){
+      if(!aiOn){
+        showError("<b>聞き取りモード（自動判定 → 日本語）にはOpenAI APIキーが必要です。</b>上の設定にキーを入れてください。");
+        logDiag("e", "聞き取りモードのキーボード翻訳を開始できません: APIキー未設定");
+        return;
+      }
+      showError("");
+      srcTag.textContent="入力（自動判定）"; srcTag.className="tag ai";
+      srcSub.textContent="入力言語をAIが判定し、日本語に翻訳します（日本語はそのまま）。";
+      addHistory(text, "auto", "ja", "keyboard", null, { detectedCode:"", detectedLabel:"" });
+      return;
+    }
     srcTag.textContent="入力"; srcTag.className="tag";
     addHistory(text, srcSel.value, tgtSel.value, "keyboard");
   });
@@ -1388,6 +1540,7 @@
     var ap=cq("#aiPill"); if(ap){ ap.textContent="AI経路：キー未設定（無料経路で動作）"; ap.className="pill"; }
     var sd=cq("#statusDot"); if(sd) sd.className="dot";
     var lp=cq("#latencyPill"); if(lp) lp.textContent="処理 — ms";
+    var taj=cq("#tglAutoJa"); if(taj) taj.setAttribute("aria-pressed","false");
     var html="<!doctype html>\n"+clone.outerHTML;
     var blob=new Blob([html], { type:"text/html;charset=utf-8" });
     var a=document.createElement("a");
